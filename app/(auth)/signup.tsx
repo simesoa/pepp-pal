@@ -248,6 +248,18 @@ export default function SignupScreen() {
                 <Text className="text-penn-accent">Sign in</Text>
               </Text>
             </TouchableOpacity>
+
+            {/* Policy acknowledgement */}
+            <View className="mt-5 flex-row flex-wrap justify-center gap-x-1">
+              <Text className="text-penn-muted text-xs">By signing up you agree to our</Text>
+              <TouchableOpacity onPress={() => router.push('/(app)/policy/terms')}>
+                <Text className="text-penn-accent text-xs">Terms</Text>
+              </TouchableOpacity>
+              <Text className="text-penn-muted text-xs">and</Text>
+              <TouchableOpacity onPress={() => router.push('/(app)/policy/privacy')}>
+                <Text className="text-penn-accent text-xs">Privacy Policy</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

@@ -104,8 +104,11 @@ export default function WaitingScreen() {
         </View>
       </View>
 
-      {/* Sign out link */}
-      <View className="pb-8 items-center">
+      {/* Bottom links */}
+      <View className="pb-8 flex-row justify-center gap-x-6">
+        <TouchableOpacity onPress={() => router.push('/(app)/settings')}>
+          <Text className="text-penn-muted text-sm">Settings</Text>
+        </TouchableOpacity>
         <TouchableOpacity onPress={handleSignOut}>
           <Text className="text-penn-muted text-sm">Sign out</Text>
         </TouchableOpacity>

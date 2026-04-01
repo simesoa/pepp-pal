@@ -97,6 +97,22 @@ export default function WelcomeScreen() {
               Sign in
             </Text>
           </TouchableOpacity>
+
+          {/* Policy links */}
+          <View className="flex-row justify-center flex-wrap gap-x-4 gap-y-1 pt-2">
+            {[
+              { label: 'Privacy', route: '/(app)/policy/privacy' },
+              { label: 'Terms', route: '/(app)/policy/terms' },
+              { label: 'Guidelines', route: '/(app)/policy/guidelines' },
+            ].map(({ label, route }) => (
+              <TouchableOpacity
+                key={label}
+                onPress={() => router.push(route as Parameters<typeof router.push>[0])}
+              >
+                <Text className="text-penn-muted text-xs">{label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
       </Animated.View>
     </SafeAreaView>

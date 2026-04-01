@@ -14,12 +14,16 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { useChat } from '@/hooks/useChat';
+import { usePairInfo } from '@/hooks/usePairInfo';
 import { MessageBubble } from '@/components/MessageBubble';
 import { SafetyModal } from '@/components/SafetyModal';
 import { IdentityWarningBanner } from '@/components/IdentityWarningBanner';
+import { ChatMenuModal } from '@/components/ChatMenuModal';
 import { filterMessage } from '@/lib/identityFilter';
 import { supabase } from '@/lib/supabase';
 import { Message } from '@/types';
+
+const INACTIVE_DAYS = 14;
 
 export default function ChatScreen() {
   const { pairId } = useLocalSearchParams<{ pairId: string }>();
@@ -27,10 +31,12 @@ export default function ChatScreen() {
   const { userId } = useAuth();
   const { messages, isLoading, partnerTyping, sendMessage, sendTyping } =
     useChat(pairId ?? null, userId);
+  const { pair } = usePairInfo(pairId ?? null);
 
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [safetyVisible, setSafetyVisible] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
   const [warningVisible, setWarningVisible] = useState(false);
   const [warningText, setWarningText] = useState('');
 
@@ -45,13 +51,20 @@ export default function ChatScreen() {
     }
   }, [messages]);
 
-  // Cleanup timeouts
   useEffect(() => {
     return () => {
       if (warningTimeout.current) clearTimeout(warningTimeout.current);
       if (typingTimeout.current) clearTimeout(typingTimeout.current);
     };
   }, []);
+
+  // Determine if the pair is inactive (no messages for 14 days)
+  const isInactive = (() => {
+    if (!pair) return false;
+    const ref = pair.last_message_at ?? pair.created_at;
+    const days = (Date.now() - new Date(ref).getTime()) / (1000 * 60 * 60 * 24);
+    return days >= INACTIVE_DAYS;
+  })();
 
   const showWarning = useCallback((msg: string) => {
     setWarningText(msg);
@@ -64,7 +77,6 @@ export default function ChatScreen() {
     const content = input.trim();
     if (!content || sending) return;
 
-    // Identity filter check
     const filterResult = filterMessage(content);
     if (filterResult.blocked) {
       showWarning(filterResult.reason ?? 'Identity sharing is not allowed until graduation.');
@@ -77,7 +89,7 @@ export default function ChatScreen() {
     const { error } = await sendMessage(content);
     if (error) {
       Alert.alert('Message failed', error);
-      setInput(content); // restore input
+      setInput(content);
     }
 
     setSending(false);
@@ -85,27 +97,14 @@ export default function ChatScreen() {
 
   const handleInputChange = useCallback((text: string) => {
     setInput(text);
-
-    // Broadcast typing indicator (throttled)
     if (typingTimeout.current) return;
     sendTyping();
-    typingTimeout.current = setTimeout(() => {
-      typingTimeout.current = null;
-    }, 2000);
+    typingTimeout.current = setTimeout(() => { typingTimeout.current = null; }, 2000);
   }, [sendTyping]);
 
-  async function handleSignOut() {
-    Alert.alert('Sign out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign out',
-        style: 'destructive',
-        onPress: async () => {
-          await supabase.auth.signOut();
-          router.replace('/(auth)/welcome');
-        },
-      },
-    ]);
+  function handlePairDeactivated() {
+    // Navigated away – go to status which will route to waiting
+    router.replace('/(app)/status');
   }
 
   const renderMessage = useCallback(
@@ -122,26 +121,46 @@ export default function ChatScreen() {
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <View className="flex-row items-center justify-between px-5 py-3 border-b border-penn-border">
         <View>
-          <Text className="text-penn-text text-base font-semibold">
-            Your Penn Pal
-          </Text>
+          <Text className="text-penn-text text-base font-semibold">Your Penn Pal</Text>
           <Text className="text-penn-muted text-xs">Anonymous until graduation</Text>
         </View>
-        <View className="flex-row items-center gap-x-4">
+        <View className="flex-row items-center gap-x-5">
           <TouchableOpacity
             onPress={() => setSafetyVisible(true)}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Text className="text-penn-muted text-sm">Need support?</Text>
+            <Text className="text-penn-muted text-sm">Support</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            onPress={handleSignOut}
+            onPress={() => router.push('/(app)/settings')}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Text className="text-penn-muted text-sm">Sign out</Text>
+            <Text className="text-penn-muted text-sm">Settings</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setMenuVisible(true)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            className="w-8 h-8 items-center justify-center"
+          >
+            <Text className="text-penn-muted text-xl leading-none">⋯</Text>
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* ── Inactive match banner ───────────────────────────────────────── */}
+      {isInactive && (
+        <View className="mx-4 mt-3 bg-penn-surface border border-penn-border rounded-2xl px-4 py-3 flex-row items-center justify-between">
+          <Text className="text-penn-muted text-[13px] flex-1 leading-5">
+            No messages in {INACTIVE_DAYS} days. Looking for a fresh start?
+          </Text>
+          <TouchableOpacity
+            className="ml-3 bg-penn-accent rounded-xl px-3 py-2"
+            onPress={() => setMenuVisible(true)}
+          >
+            <Text className="text-white text-[12px] font-semibold">Rematch</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <KeyboardAvoidingView
         className="flex-1"
@@ -178,7 +197,6 @@ export default function ChatScreen() {
           />
         )}
 
-        {/* ── Typing indicator ─────────────────────────────────────────── */}
         {partnerTyping && (
           <View className="px-5 pb-2">
             <Text className="text-penn-muted text-[13px] italic">
@@ -187,7 +205,6 @@ export default function ChatScreen() {
           </View>
         )}
 
-        {/* ── Identity warning banner ──────────────────────────────────── */}
         <IdentityWarningBanner visible={warningVisible} message={warningText} />
 
         {/* ── Input bar ────────────────────────────────────────────────── */}
@@ -220,10 +237,16 @@ export default function ChatScreen() {
         </View>
       </KeyboardAvoidingView>
 
-      <SafetyModal
-        visible={safetyVisible}
-        onClose={() => setSafetyVisible(false)}
-      />
+      <SafetyModal visible={safetyVisible} onClose={() => setSafetyVisible(false)} />
+
+      {pairId && (
+        <ChatMenuModal
+          visible={menuVisible}
+          pairId={pairId}
+          onClose={() => setMenuVisible(false)}
+          onPairDeactivated={handlePairDeactivated}
+        />
+      )}
     </SafeAreaView>
   );
 }
