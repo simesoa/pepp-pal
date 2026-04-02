@@ -1,8 +1,11 @@
 /**
  * Status router screen.
- * On first load after login/confirmation, ensures the public.users row
- * exists (calls register_and_match with the pending grad_year if not),
- * then redirects to /waiting or /chat.
+ * Ensures the public.users row exists, then routes to /waiting or /chat.
+ *
+ * Recovery path (email confirmation required scenario):
+ *   1. Try register_and_match RPC (needs migration 004)
+ *   2. If that fails, direct-insert the user row using auth email + saved grad_year
+ *   3. Either way, user reaches the waiting screen
  */
 import { useEffect, useState } from 'react';
 import { View, Text, ActivityIndicator } from 'react-native';
@@ -20,57 +23,74 @@ export default function StatusScreen() {
     if (!userId) return;
 
     async function bootstrap() {
-      // 1. Check if user record exists
+      // 1. Check if the user row exists
       const { data, error } = await supabase
         .from('users')
         .select('status, pair_id')
         .eq('id', userId)
-        .maybeSingle();           // returns null (not error) when row missing
+        .maybeSingle();
 
       if (error) {
-        // Real network error – go to waiting which shows the retry UI
+        // Real DB/network error – go to waiting which surfaces the retry UI
         router.replace('/(app)/waiting');
         return;
       }
 
-      // 2. Row missing → registration didn't complete (email confirmation
-      //    was required and register_and_match ran before the session existed).
-      //    Re-run it now using the locally saved grad_year.
-      if (!data) {
-        setLabel('Finishing account setup…');
-        const savedYear = await AsyncStorage.getItem('@pennpal:pending_grad_year');
-        const savedPrompt = await AsyncStorage.getItem('@pennpal:pending_prompt');
-
-        if (savedYear) {
-          const { error: rpcError } = await supabase.rpc('register_and_match', {
-            p_grad_year: parseInt(savedYear, 10),
-            p_prompt: savedPrompt || null,
-          });
-
-          if (!rpcError) {
-            await AsyncStorage.removeItem('@pennpal:pending_grad_year');
-            await AsyncStorage.removeItem('@pennpal:pending_prompt');
-          }
-        }
-
-        // Re-fetch after registration attempt
-        const { data: retryData } = await supabase
-          .from('users')
-          .select('status, pair_id')
-          .eq('id', userId)
-          .maybeSingle();
-
-        if (retryData?.status === 'matched' && retryData.pair_id) {
-          router.replace({ pathname: '/(app)/chat', params: { pairId: retryData.pair_id } });
+      // 2. Row exists → route normally
+      if (data) {
+        if (data.status === 'matched' && data.pair_id) {
+          router.replace({ pathname: '/(app)/chat', params: { pairId: data.pair_id } });
         } else {
           router.replace('/(app)/waiting');
         }
         return;
       }
 
-      // 3. Row exists – route normally
-      if (data.status === 'matched' && data.pair_id) {
-        router.replace({ pathname: '/(app)/chat', params: { pairId: data.pair_id } });
+      // 3. No row → registration didn't complete (email confirmation gated it).
+      //    Try to create the row now.
+      setLabel('Finishing account setup…');
+
+      const savedYear  = await AsyncStorage.getItem('@pennpal:pending_grad_year');
+      const savedPrompt = await AsyncStorage.getItem('@pennpal:pending_prompt');
+      const gradYear   = savedYear ? parseInt(savedYear, 10) : null;
+
+      if (gradYear && gradYear >= 2024 && gradYear <= 2040) {
+        // Try the full RPC first (creates row + attempts matching)
+        const { error: rpcErr } = await supabase.rpc('register_and_match', {
+          p_grad_year: gradYear,
+          p_prompt: savedPrompt || null,
+        });
+
+        if (rpcErr) {
+          // RPC unavailable (migration not run) – fall back to direct insert
+          const { data: { user: authUser } } = await supabase.auth.getUser();
+          await supabase.from('users').upsert({
+            id: userId,
+            email: authUser?.email ?? '',
+            grad_year: gradYear,
+            prompt: savedPrompt || null,
+            status: 'waiting',
+          }, { onConflict: 'id', ignoreDuplicates: false });
+        }
+
+        await AsyncStorage.removeItem('@pennpal:pending_grad_year');
+        await AsyncStorage.removeItem('@pennpal:pending_prompt');
+      } else {
+        // No saved grad_year – can't auto-recover; send to waiting which
+        // shows a clear error with sign-out option.
+        router.replace('/(app)/waiting');
+        return;
+      }
+
+      // Re-fetch after setup
+      const { data: retryData } = await supabase
+        .from('users')
+        .select('status, pair_id')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (retryData?.status === 'matched' && retryData.pair_id) {
+        router.replace({ pathname: '/(app)/chat', params: { pairId: retryData.pair_id } });
       } else {
         router.replace('/(app)/waiting');
       }
