@@ -64,17 +64,15 @@ export default function SignupScreen() {
       if (authError) throw authError;
       if (!authData.user) throw new Error('Signup failed – no user returned');
 
-      // 2. Trigger matching via Edge Function
-      const { error: fnError } = await supabase.functions.invoke('match-user', {
-        body: {
-          grad_year: gradYear,
-          prompt: prompt.trim() || null,
-        },
+      // 2. Create public profile and attempt matching via RPC
+      const { error: rpcError } = await supabase.rpc('register_and_match', {
+        p_grad_year: gradYear,
+        p_prompt: prompt.trim() || null,
       });
 
-      if (fnError) {
-        console.warn('match-user function error:', fnError.message);
-        // Non-fatal – user still created; they will stay in waiting state
+      if (rpcError) {
+        console.warn('register_and_match error:', rpcError.message);
+        // Non-fatal – auth account exists; waiting screen will show error + retry
       }
 
       track('signup_completed', { grad_year: gradYear });
