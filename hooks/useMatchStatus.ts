@@ -30,7 +30,11 @@ export function useMatchStatus(userId: string | null): MatchStatus {
       .single();
 
     if (fetchError) {
-      setError('Could not reach the server. Check your connection.');
+      // PGRST116 = no rows – account setup incomplete, not a network issue
+      const msg = fetchError.code === 'PGRST116'
+        ? 'Account setup incomplete. Please sign out and sign in again.'
+        : 'Could not reach the server. Check your connection.';
+      setError(msg);
     } else if (data) {
       setError(null);
       setStatus(data.status as UserStatus);

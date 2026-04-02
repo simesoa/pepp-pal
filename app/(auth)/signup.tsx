@@ -12,6 +12,7 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
 
@@ -64,15 +65,22 @@ export default function SignupScreen() {
       if (authError) throw authError;
       if (!authData.user) throw new Error('Signup failed – no user returned');
 
-      // 2. Create public profile and attempt matching via RPC
+      // Save grad_year so status screen can complete registration after
+      // email confirmation (signUp returns no session when confirmation required)
+      await AsyncStorage.setItem('@pennpal:pending_grad_year', String(gradYear));
+      await AsyncStorage.setItem('@pennpal:pending_prompt', prompt.trim());
+
+      // 2. Create public profile and attempt matching via RPC.
+      // This succeeds immediately if email confirmation is disabled.
+      // If confirmation is required, auth.uid() will be null and it will
+      // fail silently – status screen retries it after the session is live.
       const { error: rpcError } = await supabase.rpc('register_and_match', {
         p_grad_year: gradYear,
         p_prompt: prompt.trim() || null,
       });
 
       if (rpcError) {
-        console.warn('register_and_match error:', rpcError.message);
-        // Non-fatal – auth account exists; waiting screen will show error + retry
+        console.warn('register_and_match error (will retry after confirmation):', rpcError.message);
       }
 
       track('signup_completed', { grad_year: gradYear });
