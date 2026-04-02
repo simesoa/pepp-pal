@@ -19,7 +19,9 @@ import { MessageBubble } from '@/components/MessageBubble';
 import { SafetyModal } from '@/components/SafetyModal';
 import { IdentityWarningBanner } from '@/components/IdentityWarningBanner';
 import { ChatMenuModal } from '@/components/ChatMenuModal';
+import { StarterPrompts } from '@/components/StarterPrompts';
 import { filterMessage } from '@/lib/identityFilter';
+import { SILENCE_NUDGE_MINUTES } from '@/lib/starterPrompts';
 import { supabase } from '@/lib/supabase';
 import { Message } from '@/types';
 
@@ -39,10 +41,12 @@ export default function ChatScreen() {
   const [menuVisible, setMenuVisible] = useState(false);
   const [warningVisible, setWarningVisible] = useState(false);
   const [warningText, setWarningText] = useState('');
+  const [showSilenceNudge, setShowSilenceNudge] = useState(false);
 
   const flatListRef = useRef<FlatList<Message>>(null);
   const warningTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const silenceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -55,8 +59,22 @@ export default function ChatScreen() {
     return () => {
       if (warningTimeout.current) clearTimeout(warningTimeout.current);
       if (typingTimeout.current) clearTimeout(typingTimeout.current);
+      if (silenceTimer.current) clearTimeout(silenceTimer.current);
     };
   }, []);
+
+  // Silence nudge: show after SILENCE_NUDGE_MINUTES of no new messages
+  useEffect(() => {
+    if (isLoading || messages.length === 0) return;
+
+    setShowSilenceNudge(false);
+    if (silenceTimer.current) clearTimeout(silenceTimer.current);
+
+    silenceTimer.current = setTimeout(
+      () => setShowSilenceNudge(true),
+      SILENCE_NUDGE_MINUTES * 60 * 1000,
+    );
+  }, [messages, isLoading]);
 
   // Determine if the pair is inactive (no messages for 14 days)
   const isInactive = (() => {
@@ -85,6 +103,7 @@ export default function ChatScreen() {
 
     setSending(true);
     setInput('');
+    setShowSilenceNudge(false);
 
     const { error } = await sendMessage(content);
     if (error) {
@@ -102,8 +121,13 @@ export default function ChatScreen() {
     typingTimeout.current = setTimeout(() => { typingTimeout.current = null; }, 2000);
   }, [sendTyping]);
 
+  /** When user taps a starter prompt, pre-fill the input */
+  const handlePromptSelect = useCallback((text: string) => {
+    setInput(text);
+    setShowSilenceNudge(false);
+  }, []);
+
   function handlePairDeactivated() {
-    // Navigated away – go to status which will route to waiting
     router.replace('/(app)/status');
   }
 
@@ -167,21 +191,16 @@ export default function ChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        {/* ── Message list ─────────────────────────────────────────────── */}
+        {/* ── Message list / empty state ───────────────────────────────── */}
         {isLoading ? (
           <View className="flex-1 items-center justify-center">
             <ActivityIndicator color="#7c6af7" />
           </View>
         ) : messages.length === 0 ? (
-          <View className="flex-1 items-center justify-center px-10">
-            <Text className="text-penn-muted text-5xl mb-4">✉️</Text>
-            <Text className="text-penn-text text-lg font-semibold text-center mb-2">
-              Say hello
-            </Text>
-            <Text className="text-penn-muted text-[15px] text-center leading-6">
-              Your Penn Pal is here. Break the ice — this is a safe space.
-            </Text>
-          </View>
+          <StarterPrompts
+            seed={pairId ?? 'default'}
+            onSelect={handlePromptSelect}
+          />
         ) : (
           <FlatList
             ref={flatListRef}
@@ -203,6 +222,15 @@ export default function ChatScreen() {
               Penn Pal is typing…
             </Text>
           </View>
+        )}
+
+        {/* ── Silence nudge ─────────────────────────────────────────────── */}
+        {showSilenceNudge && messages.length > 0 && (
+          <StarterPrompts
+            seed={pairId ?? 'default'}
+            onSelect={handlePromptSelect}
+            nudge
+          />
         )}
 
         <IdentityWarningBanner visible={warningVisible} message={warningText} />

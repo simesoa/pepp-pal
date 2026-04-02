@@ -221,6 +221,17 @@ export default function SignupScreen() {
               </Text>
             </View>
 
+            {/* Community notice */}
+            <View className="bg-penn-surface border border-penn-border rounded-2xl px-4 py-4 mb-6">
+              <Text className="text-penn-accent text-xs font-semibold uppercase tracking-wider mb-2">
+                A note before you join
+              </Text>
+              <Text className="text-penn-muted text-[13px] leading-5">
+                Penn Pal is a private space. Be kind, stay anonymous, and reach out to support if
+                anything feels unsafe. You can report or leave any conversation at any time.
+              </Text>
+            </View>
+
             {/* Submit */}
             <TouchableOpacity
               className={`rounded-2xl py-4 items-center ${

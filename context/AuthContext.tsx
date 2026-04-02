@@ -6,30 +6,63 @@ interface AuthContextValue {
   session: Session | null;
   userId: string | null;
   isLoading: boolean;
+  isBanned: boolean;
+  isAdmin: boolean;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
   session: null,
   userId: null,
   isLoading: true,
+  isBanned: false,
+  isAdmin: false,
+  refreshProfile: async () => {},
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isBanned, setIsBanned] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  async function loadProfile(userId: string) {
+    const { data } = await supabase
+      .from('users')
+      .select('is_banned, is_admin')
+      .eq('id', userId)
+      .single();
+
+    setIsBanned(data?.is_banned ?? false);
+    setIsAdmin(data?.is_admin ?? false);
+  }
+
+  async function refreshProfile() {
+    if (session?.user?.id) {
+      await loadProfile(session.user.id);
+    }
+  }
 
   useEffect(() => {
-    // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      setIsLoading(false);
+      if (session?.user?.id) {
+        loadProfile(session.user.id).finally(() => setIsLoading(false));
+      } else {
+        setIsLoading(false);
+      }
     });
 
-    // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         setSession(session);
-        setIsLoading(false);
+        if (session?.user?.id) {
+          loadProfile(session.user.id).finally(() => setIsLoading(false));
+        } else {
+          setIsBanned(false);
+          setIsAdmin(false);
+          setIsLoading(false);
+        }
       },
     );
 
@@ -38,11 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{
-        session,
-        userId: session?.user?.id ?? null,
-        isLoading,
-      }}
+      value={{ session, userId: session?.user?.id ?? null, isLoading, isBanned, isAdmin, refreshProfile }}
     >
       {children}
     </AuthContext.Provider>

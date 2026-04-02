@@ -19,21 +19,23 @@ interface RowProps {
   onPress: () => void;
   destructive?: boolean;
   rightLabel?: string;
+  disabled?: boolean;
 }
 
-function SettingsRow({ label, sublabel, onPress, destructive = false, rightLabel }: RowProps) {
+function SettingsRow({ label, sublabel, onPress, destructive = false, rightLabel, disabled }: RowProps) {
   return (
     <TouchableOpacity
       className="flex-row items-center justify-between py-4 border-b border-penn-border"
       onPress={onPress}
       activeOpacity={0.7}
+      disabled={disabled}
     >
       <View className="flex-1">
-        <Text className={`text-[15px] font-medium ${destructive ? 'text-red-400' : 'text-penn-text'}`}>
+        <Text className={`text-[15px] font-medium ${destructive ? 'text-red-400' : 'text-penn-text'} ${disabled ? 'opacity-40' : ''}`}>
           {label}
         </Text>
         {sublabel ? (
-          <Text className="text-penn-muted text-xs mt-0.5">{sublabel}</Text>
+          <Text className="text-penn-muted text-xs mt-0.5 leading-4">{sublabel}</Text>
         ) : null}
       </View>
       {rightLabel ? (
@@ -47,7 +49,7 @@ function SettingsRow({ label, sublabel, onPress, destructive = false, rightLabel
 
 function SectionHeader({ title }: { title: string }) {
   return (
-    <Text className="text-penn-muted text-xs uppercase tracking-wider mt-7 mb-2 px-0">
+    <Text className="text-penn-muted text-xs uppercase tracking-wider mt-7 mb-2">
       {title}
     </Text>
   );
@@ -55,7 +57,7 @@ function SectionHeader({ title }: { title: string }) {
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { userId } = useAuth();
+  const { isAdmin } = useAuth();
   const [deletingAccount, setDeletingAccount] = useState(false);
 
   async function handleSignOut() {
@@ -75,14 +77,10 @@ export default function SettingsScreen() {
   async function handleDeleteAccount() {
     Alert.alert(
       'Delete account',
-      'This is permanent. Your messages will be anonymised and your account will be removed.',
+      'This permanently removes your account. Your messages will be anonymised so your Penn Pal\'s conversation history is preserved. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete my account',
-          style: 'destructive',
-          onPress: confirmDelete,
-        },
+        { text: 'Delete my account', style: 'destructive', onPress: confirmDelete },
       ],
     );
   }
@@ -92,7 +90,6 @@ export default function SettingsScreen() {
     try {
       const { error } = await supabase.functions.invoke('delete-account');
       if (error) throw error;
-
       await supabase.auth.signOut();
       router.replace('/(auth)/welcome');
     } catch (err: unknown) {
@@ -121,19 +118,16 @@ export default function SettingsScreen() {
         {/* Account */}
         <SectionHeader title="Account" />
         <View className="bg-penn-surface rounded-2xl px-4">
-          <SettingsRow
-            label="Sign out"
-            onPress={handleSignOut}
-          />
+          <SettingsRow label="Sign out" onPress={handleSignOut} />
           <SettingsRow
             label="Delete account"
-            sublabel="Permanently remove your account and data"
+            sublabel="Permanently anonymises your data and removes your login"
             onPress={handleDeleteAccount}
             destructive
           />
         </View>
 
-        {/* Policies */}
+        {/* Legal & Safety */}
         <SectionHeader title="Legal & Safety" />
         <View className="bg-penn-surface rounded-2xl px-4">
           <SettingsRow
@@ -156,23 +150,35 @@ export default function SettingsScreen() {
           <SettingsRow
             label="Contact support"
             sublabel="support@pennpal.app"
-            onPress={() => Linking.openURL('mailto:support@pennpal.app?subject=Penn%20Pal%20Support')}
+            onPress={() =>
+              Linking.openURL('mailto:support@pennpal.app?subject=Penn%20Pal%20Support')
+            }
           />
           <SettingsRow
             label="Crisis resources"
-            sublabel="988 Lifeline · Crisis Text Line"
+            sublabel="988 Lifeline · Text HOME to 741741"
             onPress={() => Linking.openURL('tel:988')}
           />
         </View>
 
+        {/* Admin panel – only visible to admins */}
+        {isAdmin && (
+          <>
+            <SectionHeader title="Admin" />
+            <View className="bg-penn-surface rounded-2xl px-4">
+              <SettingsRow
+                label="Admin dashboard"
+                sublabel="Reports, users, moderation"
+                onPress={() => router.push('/(admin)/')}
+              />
+            </View>
+          </>
+        )}
+
         {/* App info */}
         <SectionHeader title="App" />
         <View className="bg-penn-surface rounded-2xl px-4">
-          <SettingsRow
-            label="Version"
-            onPress={() => {}}
-            rightLabel="1.0.0"
-          />
+          <SettingsRow label="Version" onPress={() => {}} rightLabel="1.0.0" />
         </View>
 
         <View className="h-12" />
@@ -181,8 +187,8 @@ export default function SettingsScreen() {
       {deletingAccount && (
         <View className="absolute inset-0 bg-black/60 items-center justify-center">
           <View className="bg-penn-surface rounded-2xl px-8 py-6 items-center">
-            <ActivityIndicator color="#7c6af7" className="mb-3" />
-            <Text className="text-penn-text text-[15px]">Deleting account…</Text>
+            <ActivityIndicator color="#7c6af7" />
+            <Text className="text-penn-text text-[15px] mt-3">Deleting account…</Text>
           </View>
         </View>
       )}
