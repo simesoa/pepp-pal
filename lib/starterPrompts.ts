@@ -10,15 +10,15 @@ export interface StarterPrompt {
 
 export const STARTER_PROMPTS: StarterPrompt[] = [
   { id: 'p1',  text: 'What has been the hardest part of this week?' },
-  { id: 'p2',  text: 'What are you carrying right now that people don't see?' },
+  { id: 'p2',  text: "What are you carrying right now that people don't see?" },
   { id: 'p3',  text: 'What are you hoping changes this semester?' },
-  { id: 'p4',  text: 'What's one thing you've been putting off dealing with?' },
+  { id: 'p4',  text: "What's one thing you've been putting off dealing with?" },
   { id: 'p5',  text: 'What does a good day look like for you right now?' },
   { id: 'p6',  text: 'Is there something you wish someone would ask you about?' },
-  { id: 'p7',  text: 'What's been on your mind lately that you haven't said out loud?' },
+  { id: 'p7',  text: "What's been on your mind lately that you haven't said out loud?" },
   { id: 'p8',  text: 'What are you looking forward to, even a little?' },
   { id: 'p9',  text: 'How are you really doing?' },
-  { id: 'p10', text: 'What's something you've learned about yourself this semester?' },
+  { id: 'p10', text: "What's something you've learned about yourself this semester?" },
 ];
 
 /** Pick n unique prompts at random, seeded by a stable key so they don't shuffle on re-render */
