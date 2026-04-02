@@ -5,27 +5,35 @@ import { Message } from '@/types';
 interface UseChatResult {
   messages: Message[];
   isLoading: boolean;
+  fetchError: string | null;
   partnerTyping: boolean;
   sendMessage: (content: string) => Promise<{ error: string | null }>;
   sendTyping: () => void;
+  retry: () => void;
 }
 
 export function useChat(pairId: string | null, userId: string | null): UseChatResult {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [partnerTyping, setPartnerTyping] = useState(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Fetch initial messages ──────────────────────────────────────────────
   const fetchMessages = useCallback(async () => {
     if (!pairId) return;
+    setIsLoading(true);
+    setFetchError(null);
+
     const { data, error } = await supabase
       .from('messages')
       .select('*')
       .eq('pair_id', pairId)
       .order('created_at', { ascending: true });
 
-    if (!error && data) {
+    if (error) {
+      setFetchError('Could not load messages. Check your connection.');
+    } else if (data) {
       setMessages(data as Message[]);
     }
     setIsLoading(false);
@@ -41,7 +49,6 @@ export function useChat(pairId: string | null, userId: string | null): UseChatRe
 
     const channel = supabase
       .channel(`chat:${pairId}`)
-      // New messages
       .on(
         'postgres_changes',
         {
@@ -53,17 +60,14 @@ export function useChat(pairId: string | null, userId: string | null): UseChatRe
         (payload) => {
           const newMsg = payload.new as Message;
           setMessages((prev) => {
-            // Deduplicate (optimistic update may have already added it)
             if (prev.some((m) => m.id === newMsg.id)) return prev;
             return [...prev, newMsg];
           });
         },
       )
-      // Typing indicator via broadcast
       .on('broadcast', { event: 'typing' }, (payload) => {
         if (payload.payload?.sender_id !== userId) {
           setPartnerTyping(true);
-          // Auto-clear after 3 seconds
           if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
           typingTimeoutRef.current = setTimeout(() => setPartnerTyping(false), 3000);
         }
@@ -90,7 +94,6 @@ export function useChat(pairId: string | null, userId: string | null): UseChatRe
         created_at: new Date().toISOString(),
       };
 
-      // Optimistic update
       setMessages((prev) => [...prev, optimistic]);
 
       const { data, error } = await supabase
@@ -100,12 +103,10 @@ export function useChat(pairId: string | null, userId: string | null): UseChatRe
         .single();
 
       if (error) {
-        // Rollback optimistic
         setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
-        return { error: error.message };
+        return { error: 'Message failed to send. Check your connection.' };
       }
 
-      // Replace optimistic with real
       setMessages((prev) =>
         prev.map((m) => (m.id === optimisticId ? (data as Message) : m)),
       );
@@ -125,5 +126,5 @@ export function useChat(pairId: string | null, userId: string | null): UseChatRe
     });
   }, [pairId, userId]);
 
-  return { messages, isLoading, partnerTyping, sendMessage, sendTyping };
+  return { messages, isLoading, fetchError, partnerTyping, sendMessage, sendTyping, retry: fetchMessages };
 }

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,8 +7,13 @@ import {
   Linking,
 } from 'react-native';
 import { supabase } from '@/lib/supabase';
+import { track } from '@/lib/analytics';
 
 export default function BannedScreen() {
+  useEffect(() => {
+    track('banned_screen_viewed');
+  }, []);
+
   async function handleSignOut() {
     await supabase.auth.signOut();
   }

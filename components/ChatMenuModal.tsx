@@ -10,6 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { supabase } from '@/lib/supabase';
+import { track } from '@/lib/analytics';
 
 type MenuView = 'menu' | 'report';
 
@@ -25,7 +26,7 @@ interface ChatMenuModalProps {
   visible: boolean;
   pairId: string;
   onClose: () => void;
-  onPairDeactivated: () => void; // called after block or rematch so parent can navigate away
+  onPairDeactivated: () => void;
 }
 
 export function ChatMenuModal({
@@ -58,14 +59,19 @@ export function ChatMenuModal({
     setLoading(false);
 
     if (error) {
-      Alert.alert('Report failed', error.message);
+      Alert.alert(
+        'Report failed',
+        'We could not submit your report right now. Please try again or contact support@pennpal.app.',
+        [{ text: 'OK' }],
+      );
       return;
     }
 
+    track('report_submitted');
     resetAndClose();
     Alert.alert(
-      'Report submitted',
-      'Thank you. Our team will review this conversation.',
+      'Report received',
+      'Thank you. Our team will review this conversation within 24 hours.',
       [{ text: 'OK' }],
     );
   }
@@ -73,7 +79,7 @@ export function ChatMenuModal({
   async function handleBlock() {
     Alert.alert(
       'Block and rematch',
-      'This will end your current conversation. You'll both be re-entered into the matching pool.',
+      'This ends your current conversation permanently. You\'ll both be re-entered into the matching pool.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -88,10 +94,11 @@ export function ChatMenuModal({
             setLoading(false);
 
             if (error) {
-              Alert.alert('Error', error.message);
+              Alert.alert('Something went wrong', 'Could not block right now. Please try again.', [{ text: 'OK' }]);
               return;
             }
 
+            track('block_action');
             resetAndClose();
             onPairDeactivated();
           },
@@ -103,7 +110,7 @@ export function ChatMenuModal({
   async function handleRematch() {
     Alert.alert(
       'Request rematch',
-      'You'll be re-entered into the matching pool. Your current Penn Pal will stay matched until they also request a rematch.',
+      'You\'ll leave this conversation and be re-entered into the matching pool. Your Penn Pal will be notified that the conversation has ended.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -118,10 +125,11 @@ export function ChatMenuModal({
             setLoading(false);
 
             if (error) {
-              Alert.alert('Error', error.message);
+              Alert.alert('Something went wrong', 'Could not process rematch right now. Please try again.', [{ text: 'OK' }]);
               return;
             }
 
+            track('rematch_requested');
             resetAndClose();
             onPairDeactivated();
           },
@@ -129,6 +137,10 @@ export function ChatMenuModal({
       ],
     );
   }
+
+  const reportReady =
+    selectedReason !== '' &&
+    (selectedReason !== 'Other' || customReason.trim().length > 0);
 
   return (
     <Modal
@@ -141,7 +153,6 @@ export function ChatMenuModal({
       <Pressable className="flex-1 bg-black/70 justify-end" onPress={resetAndClose}>
         <Pressable onPress={(e) => e.stopPropagation()}>
           <View className="bg-penn-surface rounded-t-3xl px-6 pt-6 pb-10">
-            {/* Drag handle */}
             <View className="w-10 h-1 bg-penn-border rounded-full self-center mb-6" />
 
             {view === 'menu' ? (
@@ -167,6 +178,7 @@ export function ChatMenuModal({
                       Flag inappropriate content for review
                     </Text>
                   </View>
+                  <Text className="text-penn-muted text-base ml-2">›</Text>
                 </TouchableOpacity>
 
                 {/* Block */}
@@ -207,13 +219,12 @@ export function ChatMenuModal({
                   </View>
                 </TouchableOpacity>
 
-                {loading && (
-                  <ActivityIndicator className="mt-4" color="#7c6af7" />
-                )}
+                {loading && <ActivityIndicator className="mt-4" color="#7c6af7" />}
 
                 <TouchableOpacity
                   className="bg-penn-border rounded-xl py-3 items-center mt-5"
                   onPress={resetAndClose}
+                  disabled={loading}
                 >
                   <Text className="text-penn-text font-medium">Cancel</Text>
                 </TouchableOpacity>
@@ -275,10 +286,10 @@ export function ChatMenuModal({
 
                 <TouchableOpacity
                   className={`rounded-2xl py-4 items-center ${
-                    selectedReason && !loading ? 'bg-penn-accent' : 'bg-penn-border'
+                    reportReady && !loading ? 'bg-penn-accent' : 'bg-penn-border'
                   }`}
                   onPress={handleReport}
-                  disabled={!selectedReason || loading || (selectedReason === 'Other' && !customReason.trim())}
+                  disabled={!reportReady || loading}
                 >
                   {loading ? (
                     <ActivityIndicator color="#fff" />

@@ -6,6 +6,7 @@ interface MatchStatus {
   status: UserStatus | null;
   pairId: string | null;
   isLoading: boolean;
+  error: string | null;
   refresh: () => Promise<void>;
 }
 
@@ -17,16 +18,21 @@ export function useMatchStatus(userId: string | null): MatchStatus {
   const [status, setStatus] = useState<UserStatus | null>(null);
   const [pairId, setPairId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchStatus = useCallback(async () => {
     if (!userId) return;
-    const { data, error } = await supabase
+
+    const { data, error: fetchError } = await supabase
       .from('users')
       .select('status, pair_id')
       .eq('id', userId)
       .single();
 
-    if (!error && data) {
+    if (fetchError) {
+      setError('Could not reach the server. Check your connection.');
+    } else if (data) {
+      setError(null);
       setStatus(data.status as UserStatus);
       setPairId(data.pair_id);
     }
@@ -38,15 +44,12 @@ export function useMatchStatus(userId: string | null): MatchStatus {
 
     fetchStatus();
 
-    // Poll every 5 s while waiting
     const interval = setInterval(() => {
-      if (status !== 'matched') {
-        fetchStatus();
-      }
+      if (status !== 'matched') fetchStatus();
     }, 5000);
 
     return () => clearInterval(interval);
   }, [userId, status, fetchStatus]);
 
-  return { status, pairId, isLoading, refresh: fetchStatus };
+  return { status, pairId, isLoading, error, refresh: fetchStatus };
 }

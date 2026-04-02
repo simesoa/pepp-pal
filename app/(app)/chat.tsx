@@ -20,9 +20,10 @@ import { SafetyModal } from '@/components/SafetyModal';
 import { IdentityWarningBanner } from '@/components/IdentityWarningBanner';
 import { ChatMenuModal } from '@/components/ChatMenuModal';
 import { StarterPrompts } from '@/components/StarterPrompts';
+import { ErrorState } from '@/components/ErrorState';
 import { filterMessage } from '@/lib/identityFilter';
 import { SILENCE_NUDGE_MINUTES } from '@/lib/starterPrompts';
-import { supabase } from '@/lib/supabase';
+import { track } from '@/lib/analytics';
 import { Message } from '@/types';
 
 const INACTIVE_DAYS = 14;
@@ -31,7 +32,7 @@ export default function ChatScreen() {
   const { pairId } = useLocalSearchParams<{ pairId: string }>();
   const router = useRouter();
   const { userId } = useAuth();
-  const { messages, isLoading, partnerTyping, sendMessage, sendTyping } =
+  const { messages, isLoading, fetchError, partnerTyping, sendMessage, sendTyping, retry } =
     useChat(pairId ?? null, userId);
   const { pair } = usePairInfo(pairId ?? null);
 
@@ -42,11 +43,21 @@ export default function ChatScreen() {
   const [warningVisible, setWarningVisible] = useState(false);
   const [warningText, setWarningText] = useState('');
   const [showSilenceNudge, setShowSilenceNudge] = useState(false);
+  const hasTrackedConversation = useRef(false);
+  const hasTrackedFirstMessage = useRef(false);
 
   const flatListRef = useRef<FlatList<Message>>(null);
   const warningTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const silenceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Track conversation_started once per mount when chat is empty
+  useEffect(() => {
+    if (!isLoading && messages.length === 0 && !hasTrackedConversation.current) {
+      hasTrackedConversation.current = true;
+      track('conversation_started');
+    }
+  }, [isLoading, messages.length]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -63,20 +74,18 @@ export default function ChatScreen() {
     };
   }, []);
 
-  // Silence nudge: show after SILENCE_NUDGE_MINUTES of no new messages
+  // Silence nudge: after SILENCE_NUDGE_MINUTES of no new messages
   useEffect(() => {
     if (isLoading || messages.length === 0) return;
-
     setShowSilenceNudge(false);
     if (silenceTimer.current) clearTimeout(silenceTimer.current);
-
     silenceTimer.current = setTimeout(
       () => setShowSilenceNudge(true),
       SILENCE_NUDGE_MINUTES * 60 * 1000,
     );
   }, [messages, isLoading]);
 
-  // Determine if the pair is inactive (no messages for 14 days)
+  // Inactive pair: no messages for ≥ 14 days
   const isInactive = (() => {
     if (!pair) return false;
     const ref = pair.last_message_at ?? pair.created_at;
@@ -106,9 +115,16 @@ export default function ChatScreen() {
     setShowSilenceNudge(false);
 
     const { error } = await sendMessage(content);
+
     if (error) {
-      Alert.alert('Message failed', error);
+      Alert.alert('Message not sent', error, [{ text: 'OK' }]);
       setInput(content);
+    } else {
+      // Track first message sent per session
+      if (!hasTrackedFirstMessage.current) {
+        hasTrackedFirstMessage.current = true;
+        track('first_message_sent');
+      }
     }
 
     setSending(false);
@@ -121,14 +137,19 @@ export default function ChatScreen() {
     typingTimeout.current = setTimeout(() => { typingTimeout.current = null; }, 2000);
   }, [sendTyping]);
 
-  /** When user taps a starter prompt, pre-fill the input */
   const handlePromptSelect = useCallback((text: string) => {
     setInput(text);
     setShowSilenceNudge(false);
+    track('starter_prompt_used');
   }, []);
 
   function handlePairDeactivated() {
     router.replace('/(app)/status');
+  }
+
+  function handleSupportOpen() {
+    setSafetyVisible(true);
+    track('safety_modal_opened');
   }
 
   const renderMessage = useCallback(
@@ -150,7 +171,7 @@ export default function ChatScreen() {
         </View>
         <View className="flex-row items-center gap-x-5">
           <TouchableOpacity
-            onPress={() => setSafetyVisible(true)}
+            onPress={handleSupportOpen}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
             <Text className="text-penn-muted text-sm">Support</Text>
@@ -171,7 +192,7 @@ export default function ChatScreen() {
         </View>
       </View>
 
-      {/* ── Inactive match banner ───────────────────────────────────────── */}
+      {/* ── Inactive pair banner ─────────────────────────────────────────── */}
       {isInactive && (
         <View className="mx-4 mt-3 bg-penn-surface border border-penn-border rounded-2xl px-4 py-3 flex-row items-center justify-between">
           <Text className="text-penn-muted text-[13px] flex-1 leading-5">
@@ -191,16 +212,21 @@ export default function ChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        {/* ── Message list / empty state ───────────────────────────────── */}
+        {/* ── Message list / states ────────────────────────────────────── */}
         {isLoading ? (
-          <View className="flex-1 items-center justify-center">
+          <View className="flex-1 items-center justify-center gap-y-3">
             <ActivityIndicator color="#7c6af7" />
+            <Text className="text-penn-muted text-[13px]">Loading conversation…</Text>
           </View>
-        ) : messages.length === 0 ? (
-          <StarterPrompts
-            seed={pairId ?? 'default'}
-            onSelect={handlePromptSelect}
+        ) : fetchError ? (
+          <ErrorState
+            title="Could not load messages"
+            message={fetchError}
+            retryLabel="Reload"
+            onRetry={retry}
           />
+        ) : messages.length === 0 ? (
+          <StarterPrompts seed={pairId ?? 'default'} onSelect={handlePromptSelect} />
         ) : (
           <FlatList
             ref={flatListRef}
@@ -218,19 +244,13 @@ export default function ChatScreen() {
 
         {partnerTyping && (
           <View className="px-5 pb-2">
-            <Text className="text-penn-muted text-[13px] italic">
-              Penn Pal is typing…
-            </Text>
+            <Text className="text-penn-muted text-[13px] italic">Penn Pal is typing…</Text>
           </View>
         )}
 
         {/* ── Silence nudge ─────────────────────────────────────────────── */}
         {showSilenceNudge && messages.length > 0 && (
-          <StarterPrompts
-            seed={pairId ?? 'default'}
-            onSelect={handlePromptSelect}
-            nudge
-          />
+          <StarterPrompts seed={pairId ?? 'default'} onSelect={handlePromptSelect} nudge />
         )}
 
         <IdentityWarningBanner visible={warningVisible} message={warningText} />

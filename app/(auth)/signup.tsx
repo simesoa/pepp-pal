@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
+import { track } from '@/lib/analytics';
 
 const CURRENT_YEAR = new Date().getFullYear();
 const GRAD_YEARS = Array.from({ length: 8 }, (_, i) => CURRENT_YEAR + i);
@@ -76,6 +77,7 @@ export default function SignupScreen() {
         // Non-fatal – user still created; they will stay in waiting state
       }
 
+      track('signup_completed', { grad_year: gradYear });
       // Router redirect happens automatically via AuthContext listener
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Something went wrong';

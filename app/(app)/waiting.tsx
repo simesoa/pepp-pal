@@ -10,32 +10,29 @@ import {
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { useMatchStatus } from '@/hooks/useMatchStatus';
+import { ErrorState } from '@/components/ErrorState';
 import { supabase } from '@/lib/supabase';
+import { track } from '@/lib/analytics';
 
 export default function WaitingScreen() {
   const router = useRouter();
   const { userId } = useAuth();
-  const { status, pairId } = useMatchStatus(userId);
+  const { status, pairId, error, refresh } = useMatchStatus(userId);
 
-  // Pulse animation for the orb
   const pulse1 = useRef(new Animated.Value(1)).current;
   const pulse2 = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    track('waiting_entered');
+  }, []);
 
   useEffect(() => {
     const createPulse = (anim: Animated.Value, delay: number) =>
       Animated.loop(
         Animated.sequence([
           Animated.delay(delay),
-          Animated.timing(anim, {
-            toValue: 1.6,
-            duration: 1800,
-            useNativeDriver: true,
-          }),
-          Animated.timing(anim, {
-            toValue: 1,
-            duration: 1800,
-            useNativeDriver: true,
-          }),
+          Animated.timing(anim, { toValue: 1.6, duration: 1800, useNativeDriver: true }),
+          Animated.timing(anim, { toValue: 1,   duration: 1800, useNativeDriver: true }),
         ]),
       );
 
@@ -43,16 +40,13 @@ export default function WaitingScreen() {
     const a2 = createPulse(pulse2, 600);
     a1.start();
     a2.start();
-
-    return () => {
-      a1.stop();
-      a2.stop();
-    };
+    return () => { a1.stop(); a2.stop(); };
   }, [pulse1, pulse2]);
 
   // Navigate when matched
   useEffect(() => {
     if (status === 'matched' && pairId) {
+      track('user_matched');
       router.replace({ pathname: '/(app)/chat', params: { pairId } });
     }
   }, [status, pairId, router]);
@@ -60,12 +54,26 @@ export default function WaitingScreen() {
   async function handleSignOut() {
     Alert.alert('Sign out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign out',
-        style: 'destructive',
-        onPress: () => supabase.auth.signOut(),
-      },
+      { text: 'Sign out', style: 'destructive', onPress: () => supabase.auth.signOut() },
     ]);
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView className="flex-1 bg-penn-bg">
+        <ErrorState
+          title="No connection"
+          message={error}
+          retryLabel="Retry"
+          onRetry={refresh}
+        />
+        <View className="pb-8 items-center">
+          <TouchableOpacity onPress={handleSignOut}>
+            <Text className="text-penn-muted text-sm">Sign out</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -86,7 +94,6 @@ export default function WaitingScreen() {
           </View>
         </View>
 
-        {/* Heading */}
         <Text className="text-penn-text text-2xl font-bold text-center mb-3">
           Finding your Penn Pal…
         </Text>
@@ -94,17 +101,14 @@ export default function WaitingScreen() {
           We'll connect you with someone walking the same path.
         </Text>
 
-        {/* Subtle info */}
         <View className="mt-12 bg-penn-surface rounded-2xl px-6 py-5 w-full max-w-sm">
           <Text className="text-penn-muted text-[13px] leading-5 text-center">
-            Matching is done by graduation year. This can take a moment if others in
-            your class aren't signed up yet — you'll be matched as soon as someone
-            joins.
+            Matching is done by graduation year. You'll be connected as soon as
+            someone in your class joins.
           </Text>
         </View>
       </View>
 
-      {/* Bottom links */}
       <View className="pb-8 flex-row justify-center gap-x-6">
         <TouchableOpacity onPress={() => router.push('/(app)/settings')}>
           <Text className="text-penn-muted text-sm">Settings</Text>
