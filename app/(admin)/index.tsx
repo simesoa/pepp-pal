@@ -11,10 +11,10 @@ import {
   SafeAreaView,
   ActivityIndicator,
   RefreshControl,
-  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
+import { showAlert, showConfirm } from '@/lib/alerts';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -328,30 +328,27 @@ export default function AdminDashboard() {
     setRefreshing(false);
   }
 
-  async function handleBanToggle(user: AdminUser) {
+  function handleBanToggle(user: AdminUser) {
     const action = user.is_banned ? 'unban' : 'ban';
-    Alert.alert(
+    showConfirm(
       `${action.charAt(0).toUpperCase() + action.slice(1)} user`,
       `Are you sure you want to ${action} this user?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: action.charAt(0).toUpperCase() + action.slice(1),
-          style: user.is_banned ? 'default' : 'destructive',
-          onPress: async () => {
-            const { error } = await supabase.rpc('admin_set_ban', {
-              p_user_id: user.id,
-              p_banned: !user.is_banned,
-            });
-            if (error) {
-              Alert.alert('Error', error.message);
-            } else {
-              await Promise.all([fetchUsers(), fetchStats()]);
-              Alert.alert('Done', `User ${action}ned successfully.`);
-            }
-          },
+      {
+        confirmLabel: action.charAt(0).toUpperCase() + action.slice(1),
+        destructive: !user.is_banned,
+        onConfirm: async () => {
+          const { error } = await supabase.rpc('admin_set_ban', {
+            p_user_id: user.id,
+            p_banned: !user.is_banned,
+          });
+          if (error) {
+            showAlert('Error', error.message);
+          } else {
+            await Promise.all([fetchUsers(), fetchStats()]);
+            showAlert('Done', `User ${action}ned successfully.`);
+          }
         },
-      ],
+      },
     );
   }
 

@@ -64,30 +64,30 @@ pepp-pal/
 
 ## Setup
 
+Useful scripts: `npm run typecheck` (tsc), `npm run test:filter`
+(identity-filter unit tests), `npm run build` (web export to `dist/`).
+
+
 ### 1. Clone and install dependencies
 
 ```bash
 git clone <repo>
 cd pepp-pal
-npm install
+npm install --legacy-peer-deps --ignore-scripts
 ```
+
+(The flags are baked into `.npmrc`, so plain `npm install` also works.)
 
 ### 2. Create Supabase project
 
-1. Go to [supabase.com](https://supabase.com) and create a new project
-2. In the SQL Editor, run the entire contents of `supabase/schema.sql`
-3. Deploy the Edge Function:
+Follow **[docs/supabase-setup.md](docs/supabase-setup.md)** — in short: run
+`supabase/schema.sql` then `supabase/migrations/001 → 005` in order in the
+SQL Editor, configure the Auth URLs, and (optionally) deploy the
+`delete-account` Edge Function. The web app needs **no** Edge Function for
+signup/matching — it uses the `register_and_match()` RPC.
 
-```bash
-# Install Supabase CLI if needed
-npm install -g supabase
-
-supabase login
-supabase link --project-ref YOUR_PROJECT_REF
-
-# Deploy the match-user function
-supabase functions deploy match-user
-```
+For the full deploy runbook (Vercel, env vars, admin setup, two-user match
+testing, common errors) see **[DEPLOYMENT.md](DEPLOYMENT.md)**.
 
 ### 3. Configure environment variables
 

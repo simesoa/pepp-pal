@@ -7,9 +7,10 @@ import {
   Pressable,
   TextInput,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { supabase } from '@/lib/supabase';
+import { showAlert, showConfirm } from '@/lib/alerts';
+import { SUPPORT_EMAIL } from '@/lib/config';
 import { track } from '@/lib/analytics';
 
 type MenuView = 'menu' | 'report';
@@ -59,82 +60,76 @@ export function ChatMenuModal({
     setLoading(false);
 
     if (error) {
-      Alert.alert(
+      showAlert(
         'Report failed',
-        'We could not submit your report right now. Please try again or contact support@pennpal.app.',
-        [{ text: 'OK' }],
+        `We could not submit your report right now. Please try again or contact ${SUPPORT_EMAIL}.`,
       );
       return;
     }
 
     track('report_submitted');
     resetAndClose();
-    Alert.alert(
+    showAlert(
       'Report received',
       'Thank you. Our team will review this conversation within 24 hours.',
-      [{ text: 'OK' }],
     );
   }
 
-  async function handleBlock() {
-    Alert.alert(
+  function handleBlock() {
+    showConfirm(
       'Block and rematch',
-      'This ends your current conversation permanently. You\'ll both be re-entered into the matching pool.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Block and rematch',
-          style: 'destructive',
-          onPress: async () => {
-            setLoading(true);
-            const { error } = await supabase.rpc('deactivate_pair_and_rematch', {
-              p_pair_id: pairId,
-              p_both: true,
-            });
-            setLoading(false);
+      "This ends your current conversation permanently. You'll never be matched with this person again, and you'll both be re-entered into the matching pool.",
+      {
+        confirmLabel: 'Block and rematch',
+        destructive: true,
+        onConfirm: async () => {
+          setLoading(true);
+          const { error } = await supabase.rpc('deactivate_pair_and_rematch', {
+            p_pair_id: pairId,
+            p_both: true,
+            p_block: true,
+          });
+          setLoading(false);
 
-            if (error) {
-              Alert.alert('Something went wrong', 'Could not block right now. Please try again.', [{ text: 'OK' }]);
-              return;
-            }
+          if (error) {
+            showAlert('Something went wrong', 'Could not block right now. Please try again.');
+            return;
+          }
 
-            track('block_action');
-            resetAndClose();
-            onPairDeactivated();
-          },
+          track('block_action');
+          resetAndClose();
+          onPairDeactivated();
         },
-      ],
+      },
     );
   }
 
-  async function handleRematch() {
-    Alert.alert(
+  function handleRematch() {
+    showConfirm(
       'Request rematch',
-      'You\'ll leave this conversation and be re-entered into the matching pool. Your Penn Pal will be notified that the conversation has ended.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Request rematch',
-          style: 'destructive',
-          onPress: async () => {
-            setLoading(true);
-            const { error } = await supabase.rpc('deactivate_pair_and_rematch', {
-              p_pair_id: pairId,
-              p_both: false,
-            });
-            setLoading(false);
+      "You'll leave this conversation and be re-entered into the matching pool. Your Penn Pal will see that the conversation has ended.",
+      {
+        confirmLabel: 'Request rematch',
+        destructive: true,
+        onConfirm: async () => {
+          setLoading(true);
+          const { error } = await supabase.rpc('deactivate_pair_and_rematch', {
+            p_pair_id: pairId,
+            p_both: false,
+            p_block: false,
+          });
+          setLoading(false);
 
-            if (error) {
-              Alert.alert('Something went wrong', 'Could not process rematch right now. Please try again.', [{ text: 'OK' }]);
-              return;
-            }
+          if (error) {
+            showAlert('Something went wrong', 'Could not process rematch right now. Please try again.');
+            return;
+          }
 
-            track('rematch_requested');
-            resetAndClose();
-            onPairDeactivated();
-          },
+          track('rematch_requested');
+          resetAndClose();
+          onPairDeactivated();
         },
-      ],
+      },
     );
   }
 

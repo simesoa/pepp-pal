@@ -8,6 +8,9 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "build": "expo export --platform web",
+    "build:web": "expo export --platform web",
+    "typecheck": "tsc --noEmit",
+    "test:filter": "node scripts/test-identity-filter.mjs",
     "build:ios": "eas build --platform ios",
     "build:android": "eas build --platform android",
     "build:all": "eas build --platform all",
@@ -17,7 +20,7 @@
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "1.23.1",
-    "@supabase/supabase-js": "^2.45.4",
+    "@supabase/supabase-js": "2.45.4",
     "expo": "~51.0.28",
     "expo-constants": "~16.0.2",
     "expo-font": "~12.0.10",
@@ -44,6 +47,8 @@
     "@babel/core": "^7.24.0",
     "@types/react": "~18.2.79",
     "babel-plugin-module-resolver": "^5.0.2",
+    "eslint": "^8.57.1",
+    "eslint-config-expo": "~7.1.2",
     "typescript": "^5.3.3"
   }
 }

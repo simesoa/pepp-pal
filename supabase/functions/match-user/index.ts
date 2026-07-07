@@ -68,23 +68,32 @@ serve(async (req: Request) => {
       });
     }
 
-    // Upsert the user's public profile (in case the trigger hasn't fired yet)
-    const { error: upsertError } = await supabaseAdmin
+    // Create/refresh the profile — but never touch an already-matched user's
+    // state (a repeat call must not change grad_year or reset status).
+    const { data: existing } = await supabaseAdmin
       .from('users')
-      .upsert({
-        id: user.id,
-        email: user.email,
-        grad_year: gradYear,
-        prompt,
-        status: 'waiting',
-      }, { onConflict: 'id', ignoreDuplicates: false });
+      .select('status')
+      .eq('id', user.id)
+      .maybeSingle();
 
-    if (upsertError) {
-      console.error('Upsert error:', upsertError);
-      return new Response(JSON.stringify({ error: upsertError.message }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    if (!existing || existing.status === 'waiting') {
+      const { error: upsertError } = await supabaseAdmin
+        .from('users')
+        .upsert({
+          id: user.id,
+          email: user.email,
+          grad_year: gradYear,
+          prompt,
+          status: 'waiting',
+        }, { onConflict: 'id', ignoreDuplicates: false });
+
+      if (upsertError) {
+        console.error('Upsert error:', upsertError);
+        return new Response(JSON.stringify({ error: upsertError.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
     // Attempt matching via DB function

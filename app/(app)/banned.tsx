@@ -7,6 +7,7 @@ import {
   Linking,
 } from 'react-native';
 import { supabase } from '@/lib/supabase';
+import { SUPPORT_EMAIL, APP_NAME } from '@/lib/config';
 import { track } from '@/lib/analytics';
 
 export default function BannedScreen() {
@@ -39,7 +40,7 @@ export default function BannedScreen() {
             className="bg-penn-accent rounded-2xl py-4 items-center"
             onPress={() =>
               Linking.openURL(
-                'mailto:support@pennpal.app?subject=Account%20Suspension%20Appeal',
+                `mailto:${SUPPORT_EMAIL}?subject=Account%20Suspension%20Appeal`,
               )
             }
           >
@@ -61,7 +62,7 @@ export default function BannedScreen() {
 
       <View className="pb-8 items-center">
         <Text className="text-penn-muted text-xs text-center px-8 leading-5">
-          Penn Pal is committed to keeping this space safe for everyone.{'\n'}
+          {APP_NAME} is committed to keeping this space safe for everyone.{'\n'}
           Please review our Community Guidelines before appealing.
         </Text>
       </View>

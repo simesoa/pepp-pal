@@ -41,6 +41,8 @@ Open **SQL Editor** and run each file sequentially:
 | 2 | `supabase/migrations/001_beta.sql` | `reports`, `blocks`, `pairs.active`, `last_message_at`, `is_banned`, admin-ready fields |
 | 3 | `supabase/migrations/002_pilot.sql` | `is_admin`, all `admin_*` RPC functions, `assert_admin()` |
 | 4 | `supabase/migrations/003_analytics.sql` | `analytics_events`, `log_event()`, `admin_get_pilot_stats()` |
+| 5 | `supabase/migrations/004_web_rpc.sql` | `register_and_match()` — web signup/registration path |
+| 6 | `supabase/migrations/005_pilot_fixes.sql` | **Required.** Security + matching hardening: RLS column protection, block-aware matching, `poll_and_match()`, `delete_user_account()` |
 
 > ⚠️ **Never run `supabase/seed.sql` in production.** It is for local development only.
 

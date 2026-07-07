@@ -10,6 +10,7 @@ export default function AppLayout() {
       }}
     >
       <Stack.Screen name="status" />
+      <Stack.Screen name="complete-profile" />
       <Stack.Screen name="waiting" />
       <Stack.Screen name="chat" />
       <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />

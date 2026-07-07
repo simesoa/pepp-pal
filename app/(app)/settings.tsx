@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   SafeAreaView,
   ScrollView,
-  Alert,
   ActivityIndicator,
   Linking,
 } from 'react-native';
@@ -13,6 +12,8 @@ import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import { showAlert, showConfirm } from '@/lib/alerts';
+import { APP_NAME, SUPPORT_EMAIL, CRISIS_LINE, CRISIS_TEXT_LINE } from '@/lib/config';
 import { track } from '@/lib/analytics';
 
 // Pull version info from app.json / app.config.js at build time
@@ -20,9 +21,7 @@ const APP_VERSION    = Constants.expoConfig?.version ?? '1.0.0';
 const IOS_BUILD      = Constants.expoConfig?.ios?.buildNumber ?? '1';
 const ANDROID_BUILD  = String(Constants.expoConfig?.android?.versionCode ?? 1);
 
-const SUPPORT_EMAIL = 'support@pennpal.app';
-
-function openSupport(subject = 'Penn Pal Support') {
+function openSupport(subject = `${APP_NAME} Support`) {
   Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}`);
 }
 
@@ -81,45 +80,52 @@ export default function SettingsScreen() {
   const { isAdmin } = useAuth();
   const [deletingAccount, setDeletingAccount] = useState(false);
 
-  async function handleSignOut() {
-    Alert.alert('Sign out', 'Are you sure?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign out',
-        style: 'destructive',
-        onPress: async () => {
-          await supabase.auth.signOut();
-          router.replace('/(auth)/welcome');
-        },
+  function handleSignOut() {
+    showConfirm('Sign out', 'Are you sure?', {
+      confirmLabel: 'Sign out',
+      destructive: true,
+      onConfirm: async () => {
+        await supabase.auth.signOut();
+        router.replace('/(auth)/welcome');
       },
-    ]);
+    });
   }
 
-  async function handleDeleteAccount() {
-    Alert.alert(
+  function handleDeleteAccount() {
+    showConfirm(
       'Delete account',
-      'This permanently removes your account.\n\nYour messages will be anonymised so your Penn Pal\'s conversation history is preserved. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete my account', style: 'destructive', onPress: confirmDelete },
-      ],
+      `This permanently removes your account.\n\nYour messages will be anonymised so your ${APP_NAME}'s conversation history is preserved. This cannot be undone.`,
+      {
+        confirmLabel: 'Delete my account',
+        destructive: true,
+        onConfirm: confirmDelete,
+      },
     );
   }
 
   async function confirmDelete() {
     setDeletingAccount(true);
+    track('account_delete_requested');
     try {
-      const { error } = await supabase.functions.invoke('delete-account');
+      const { data, error } = await supabase.functions.invoke('delete-account');
       if (error) throw error;
+      if (data && data.ok !== true) throw new Error('Deletion did not complete');
       track('account_deleted');
       await supabase.auth.signOut();
       router.replace('/(auth)/welcome');
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Deletion failed. Please try again or contact support.';
-      Alert.alert('Could not delete account', message, [
-        { text: 'OK' },
-        { text: 'Contact support', onPress: () => openSupport('Account Deletion Issue') },
-      ]);
+      // The delete-account Edge Function may not be deployed yet (it requires
+      // the Supabase CLI — see docs/supabase-setup.md §6). Be honest about it:
+      // the account was NOT deleted.
+      const raw = err instanceof Error ? err.message : '';
+      const notDeployed = /failed to send|fetch|404|not found|relay/i.test(raw);
+      showAlert(
+        'Account not deleted',
+        notDeployed
+          ? `Account deletion isn't available in this environment yet. Your account has NOT been deleted. Email ${SUPPORT_EMAIL} and we'll delete it for you within 48 hours.`
+          : `Something went wrong and your account has NOT been deleted. Please try again, or email ${SUPPORT_EMAIL} and we'll handle it for you.`,
+        () => openSupport('Account Deletion Request'),
+      );
     } finally {
       setDeletingAccount(false);
     }
@@ -183,8 +189,8 @@ export default function SettingsScreen() {
           />
           <SettingsRow
             label="Crisis resources"
-            sublabel="Call or text 988 · Text HOME to 741741"
-            onPress={() => Linking.openURL('tel:988')}
+            sublabel={`Call or text ${CRISIS_LINE} · Text HOME to ${CRISIS_TEXT_LINE}`}
+            onPress={() => Linking.openURL(`tel:${CRISIS_LINE}`)}
           />
         </View>
 
@@ -203,10 +209,10 @@ export default function SettingsScreen() {
         )}
 
         {/* About */}
-        <SectionHeader title="About Penn Pal" />
+        <SectionHeader title={`About ${APP_NAME}`} />
         <View className="bg-penn-surface rounded-2xl px-4">
           <SettingsRow
-            label="What is Penn Pal?"
+            label={`What is ${APP_NAME}?`}
             sublabel="One anonymous partner. Your whole college journey."
             onPress={() => router.push('/(app)/policy/privacy')}
             rightLabel=""
@@ -228,11 +234,11 @@ export default function SettingsScreen() {
         {/* Feedback nudge */}
         <View className="mt-6 bg-penn-card rounded-2xl px-4 py-4 border border-penn-border">
           <Text className="text-penn-muted text-[13px] leading-5 text-center">
-            Penn Pal is in early pilot.{'\n'}
+            {APP_NAME} is in early pilot.{'\n'}
             Questions or feedback?{' '}
             <Text
               className="text-penn-accent"
-              onPress={() => openSupport('Penn Pal Feedback')}
+              onPress={() => openSupport(`${APP_NAME} Feedback`)}
             >
               Drop us a note.
             </Text>

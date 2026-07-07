@@ -10,10 +10,11 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
+import { showAlert } from '@/lib/alerts';
+import { track } from '@/lib/analytics';
 
 type ReportStatus = 'open' | 'reviewed' | 'resolved' | 'dismissed';
 
@@ -73,9 +74,10 @@ export default function ReportDetailScreen() {
     setUpdating(false);
 
     if (error) {
-      Alert.alert('Error', error.message);
+      showAlert('Error', error.message);
     } else {
       setCurrentStatus(newStatus);
+      track('admin_report_updated', { status: newStatus });
     }
   }
 

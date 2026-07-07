@@ -27,11 +27,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isAdmin, setIsAdmin] = useState(false);
 
   async function loadProfile(userId: string) {
+    // maybeSingle: a missing users row is normal mid-registration
     const { data } = await supabase
       .from('users')
       .select('is_banned, is_admin')
       .eq('id', userId)
-      .single();
+      .maybeSingle();
 
     setIsBanned(data?.is_banned ?? false);
     setIsAdmin(data?.is_admin ?? false);

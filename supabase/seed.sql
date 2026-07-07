@@ -9,6 +9,12 @@
 -- ============================================================
 
 -- ──────────────────────────────────────────────────────────────
+-- Prerequisites: dev schema + pgcrypto (crypt/gen_salt)
+-- ──────────────────────────────────────────────────────────────
+create schema if not exists dev;
+create extension if not exists pgcrypto;
+
+-- ──────────────────────────────────────────────────────────────
 -- Helper: create_test_auth_user(email, password)
 -- Inserts a confirmed auth.users row for local testing.
 -- ──────────────────────────────────────────────────────────────
@@ -40,7 +46,7 @@ begin
     'authenticated',
     'authenticated'
   )
-  on conflict (email) do nothing;
+  on conflict (id) do nothing;
 
   -- Insert public profile
   insert into public.users (id, email, grad_year, status)
@@ -50,11 +56,6 @@ begin
   return v_id;
 end;
 $$;
-
--- ──────────────────────────────────────────────────────────────
--- Create a dev schema for seed helpers
--- ──────────────────────────────────────────────────────────────
-create schema if not exists dev;
 
 -- ──────────────────────────────────────────────────────────────
 -- Scenario 1: Two waiting users – same grad year → should match

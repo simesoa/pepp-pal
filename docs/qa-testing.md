@@ -266,3 +266,85 @@ Before submitting to the App Store / Google Play:
 - [ ] Dark mode renders correctly on both platforms
 - [ ] Keyboard does not obscure input bar on any test device
 - [ ] Landscape orientation is disabled (portrait only)
+
+---
+
+## 13. Registration Recovery (added with the web-auth fixes)
+
+### 13A – Confirm email OFF, fresh signup
+
+1. Supabase Auth → Email → Confirm email OFF
+2. Sign up with a fresh `.edu` email + grad year
+3. **Expected:** lands directly on Waiting (or Chat if a same-year user is waiting). No "check your email" step.
+
+### 13B – Confirm email ON, fresh signup
+
+1. Confirm email ON
+2. Sign up → **Expected:** "Check your email" screen with the entered address and a working Resend button
+3. Click the emailed link → `/auth/callback` → **Expected:** "Setting things up…" then Waiting/Chat. The grad year picked at signup is used (saved locally before the auth call).
+
+### 13C – Orphaned auth user (no public.users row, no saved grad year)
+
+1. Create the orphan: sign up on device A with confirm-email ON, then confirm the link on device B (different browser storage)
+2. **Expected:** device B routes to the **Complete profile** screen asking for graduation year; picking one completes registration and matching. No dead end, no "No connection".
+
+### 13D – Missing env vars
+
+1. Deploy/build without `EXPO_PUBLIC_SUPABASE_URL`
+2. **Expected:** readable configuration-error screen naming the missing variables — never a blank white page.
+
+## 14. Password Reset
+
+1. Login screen → "Forgot password?" → enter email → **Expected:** confirmation state ("check your email")
+2. Open the emailed link → **Expected:** `/auth/callback` detects recovery and routes to the new-password form
+3. Set a new password (min 8 chars, must match confirmation) → **Expected:** routed into the app; old password no longer works
+4. Open an expired/re-used link → **Expected:** "Link expired" screen with a path to request a new one
+
+## 15. Crisis Resources
+
+1. In chat, send a message containing crisis language (e.g. "I've been thinking about suicide")
+2. **Expected:** the message SENDS (never blocked) and the Need Support modal opens with 988 + Crisis Text Line + the not-therapy disclaimer
+3. "this exam is killing me lol" must NOT trigger the modal
+
+## 16. Ended Conversation (partner left)
+
+1. Match two users A + B; as A, Request rematch
+2. As B (without navigating): try to send a message
+3. **Expected:** send fails with a readable error, and the "This conversation has ended" card with **Find a new match** replaces the input bar; tapping it returns B to the pool
+
+## 17. Block Prevention
+
+1. Match A + B; as A choose **Block and rematch**
+2. Both return to waiting — **Expected:** A and B are never matched together again (blocks are recorded and matching excludes them both directions)
+
+---
+
+## Pilot verification status (2026-07-07)
+
+Verified automatically against a local Postgres with the full schema +
+migrations (`npm run test:filter` for the filter; SQL suite for the DB):
+
+| Check | Result |
+|---|---|
+| schema.sql + migrations 001–005 apply cleanly, twice (idempotent) | ✅ pass |
+| Same-year matching, FIFO | ✅ pass |
+| Different-year users never match | ✅ pass |
+| No duplicate active pairs (re-register while matched is a no-op) | ✅ pass |
+| grad_year immutable while matched | ✅ pass |
+| One-sided rematch frees caller; partner can leave the inactive pair | ✅ pass |
+| Block recorded; blocked users never re-matched (both directions) | ✅ pass |
+| Banned users never match and cannot send messages | ✅ pass |
+| Users cannot set is_admin / is_banned / status / pair_id on their own row | ✅ pass |
+| Users can update only their prompt; cannot read other users' rows/emails | ✅ pass |
+| Non-members cannot read a pair's messages | ✅ pass |
+| Non-admin blocked from admin RPCs; admin stats/reports/ban work | ✅ pass |
+| Admin ban deactivates pair and frees the partner | ✅ pass |
+| delete_user_account frees partner and removes all user rows | ✅ pass |
+| Identity filter matrix (57 cases: block/allow/crisis) | ✅ pass |
+| `tsc --noEmit` | ✅ pass |
+| `expo export --platform web` | ✅ pass |
+
+Requires a live Supabase project + deployed build to verify manually
+(covered by suites 1–17 above): realtime chat between two browsers, email
+confirmation delivery, password-reset email delivery, Vercel deploy,
+mobile-layout sanity, Edge Function deployment.

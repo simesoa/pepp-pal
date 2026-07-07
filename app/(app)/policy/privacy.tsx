@@ -1,9 +1,10 @@
 import React from 'react';
 import { PolicyScreen, PolicySection } from '@/components/PolicyScreen';
+import { APP_NAME, SUPPORT_EMAIL, POLICY_EFFECTIVE_DATE } from '@/lib/config';
 
 const sections: PolicySection[] = [
   {
-    body: 'Penn Pal ("we", "us") is committed to protecting your privacy. This policy explains what information we collect, why we collect it, and how we use it.',
+    body: `${APP_NAME} ("we", "us") is committed to protecting your privacy. This policy explains what information we collect, why we collect it, and how we use it.`,
   },
   {
     heading: '1. Information we collect',
@@ -15,7 +16,7 @@ const sections: PolicySection[] = [
   },
   {
     heading: '3. Anonymity',
-    body: 'Penn Pal is designed to be anonymous. Your matched partner never sees your email address or graduation year. Automated filters prevent identity-revealing content from being sent. Your identity is protected until you choose to reveal it, if ever.',
+    body: `${APP_NAME} is designed to be anonymous. Your matched partner never sees your email address or graduation year. Automated filters prevent identity-revealing content from being sent. Your identity is protected until you choose to reveal it, if ever.`,
   },
   {
     heading: '4. Data retention',
@@ -27,15 +28,15 @@ const sections: PolicySection[] = [
   },
   {
     heading: '6. Children',
-    body: 'Penn Pal is intended for college students. We do not knowingly collect information from users under the age of 13. If you believe a minor has created an account, please contact support@pennpal.app.',
+    body: `${APP_NAME} is intended for college students. We do not knowingly collect information from users under the age of 13. If you believe a minor has created an account, please contact ${SUPPORT_EMAIL}.`,
   },
   {
     heading: '7. Changes to this policy',
-    body: 'We may update this policy from time to time. We will notify you of significant changes via the app. Continued use of Penn Pal after changes constitutes acceptance of the updated policy.',
+    body: `We may update this policy from time to time. We will notify you of significant changes via the app. Continued use of ${APP_NAME} after changes constitutes acceptance of the updated policy.`,
   },
   {
     heading: '8. Contact',
-    body: 'Questions? Email us at support@pennpal.app.',
+    body: `Questions? Email us at ${SUPPORT_EMAIL}.`,
   },
 ];
 
@@ -43,7 +44,7 @@ export default function PrivacyScreen() {
   return (
     <PolicyScreen
       title="Privacy Policy"
-      lastUpdated="April 2026"
+      lastUpdated={POLICY_EFFECTIVE_DATE}
       sections={sections}
     />
   );

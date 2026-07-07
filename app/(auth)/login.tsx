@@ -8,10 +8,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
+import { showAlert } from '@/lib/alerts';
+import { track } from '@/lib/analytics';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -39,10 +40,11 @@ export default function LoginScreen() {
       });
 
       if (error) throw error;
+      track('login');
       // AuthContext listener + root layout handle redirect
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Login failed';
-      Alert.alert('Sign in failed', message);
+      showAlert('Sign in failed', message);
     } finally {
       setLoading(false);
     }
@@ -121,6 +123,14 @@ export default function LoginScreen() {
                 <Text className="text-red-400 text-xs mt-1">{errors.password}</Text>
               ) : null}
             </View>
+
+            <TouchableOpacity
+              className="items-end"
+              onPress={() => router.push('/(auth)/forgot-password')}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text className="text-penn-accent text-sm">Forgot password?</Text>
+            </TouchableOpacity>
           </View>
 
           <View>

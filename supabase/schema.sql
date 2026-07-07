@@ -11,12 +11,15 @@ create extension if not exists "uuid-ossp";
 -- ──────────────────────────────────────────────────────────────
 -- ENUM types
 -- ──────────────────────────────────────────────────────────────
-create type user_status as enum ('waiting', 'matched');
+do $$ begin
+  create type user_status as enum ('waiting', 'matched');
+exception when duplicate_object then null;
+end $$;
 
 -- ──────────────────────────────────────────────────────────────
 -- Table: users (public profile, linked 1:1 to auth.users)
 -- ──────────────────────────────────────────────────────────────
-create table public.users (
+create table if not exists public.users (
   id          uuid primary key references auth.users(id) on delete cascade,
   email       text not null,
   grad_year   int  not null check (grad_year >= 2024 and grad_year <= 2040),
@@ -29,7 +32,7 @@ create table public.users (
 -- ──────────────────────────────────────────────────────────────
 -- Table: pairs
 -- ──────────────────────────────────────────────────────────────
-create table public.pairs (
+create table if not exists public.pairs (
   id         uuid primary key default uuid_generate_v4(),
   user1_id   uuid not null references public.users(id) on delete cascade,
   user2_id   uuid not null references public.users(id) on delete cascade,
@@ -38,14 +41,17 @@ create table public.pairs (
 );
 
 -- Now that pairs exists, add FK from users.pair_id → pairs.id
-alter table public.users
-  add constraint users_pair_id_fkey
-  foreign key (pair_id) references public.pairs(id) on delete set null;
+do $$ begin
+  alter table public.users
+    add constraint users_pair_id_fkey
+    foreign key (pair_id) references public.pairs(id) on delete set null;
+exception when duplicate_object then null;
+end $$;
 
 -- ──────────────────────────────────────────────────────────────
 -- Table: messages
 -- ──────────────────────────────────────────────────────────────
-create table public.messages (
+create table if not exists public.messages (
   id         uuid primary key default uuid_generate_v4(),
   pair_id    uuid not null references public.pairs(id) on delete cascade,
   sender_id  uuid not null references public.users(id) on delete cascade,
@@ -54,12 +60,15 @@ create table public.messages (
 );
 
 -- Index for fast message fetching per conversation
-create index messages_pair_id_created_at_idx on public.messages(pair_id, created_at asc);
+create index if not exists messages_pair_id_created_at_idx on public.messages(pair_id, created_at asc);
 
 -- ──────────────────────────────────────────────────────────────
 -- Realtime: enable for messages table
 -- ──────────────────────────────────────────────────────────────
-alter publication supabase_realtime add table public.messages;
+do $$ begin
+  alter publication supabase_realtime add table public.messages;
+exception when duplicate_object then null;
+end $$;
 
 -- ──────────────────────────────────────────────────────────────
 -- Row Level Security
@@ -70,24 +79,29 @@ alter table public.pairs    enable row level security;
 alter table public.messages enable row level security;
 
 -- users: can only read/update own row
+drop policy if exists "users_select_own" on public.users;
 create policy "users_select_own"
   on public.users for select
   using (auth.uid() = id);
 
+drop policy if exists "users_update_own" on public.users;
 create policy "users_update_own"
   on public.users for update
   using (auth.uid() = id);
 
+drop policy if exists "users_insert_own" on public.users;
 create policy "users_insert_own"
   on public.users for insert
   with check (auth.uid() = id);
 
 -- pairs: can read pair where you are a member
+drop policy if exists "pairs_select_member" on public.pairs;
 create policy "pairs_select_member"
   on public.pairs for select
   using (auth.uid() = user1_id or auth.uid() = user2_id);
 
 -- messages: can read messages in your pair
+drop policy if exists "messages_select_own_pair" on public.messages;
 create policy "messages_select_own_pair"
   on public.messages for select
   using (
@@ -99,6 +113,7 @@ create policy "messages_select_own_pair"
   );
 
 -- messages: can insert only into your own pair, as yourself
+drop policy if exists "messages_insert_own_pair" on public.messages;
 create policy "messages_insert_own_pair"
   on public.messages for insert
   with check (

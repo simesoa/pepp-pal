@@ -1,21 +1,22 @@
 import React from 'react';
 import { PolicyScreen, PolicySection } from '@/components/PolicyScreen';
+import { APP_NAME, POLICY_EFFECTIVE_DATE } from '@/lib/config';
 
 const sections: PolicySection[] = [
   {
-    body: 'Penn Pal is built on trust and human connection. These guidelines exist to keep it that way. Violating them may result in your account being suspended or removed.',
+    body: `${APP_NAME} is built on trust and human connection. These guidelines exist to keep it that way. Violating them may result in your account being suspended or removed.`,
   },
   {
     heading: 'Be kind',
-    body: 'Your Penn Pal is a real person going through their own college journey. Treat them with the same respect you would want. Harassment, insults, and cruelty of any kind will not be tolerated.',
+    body: `Your ${APP_NAME} is a real person going through their own college journey. Treat them with the same respect you would want. Harassment, insults, and cruelty of any kind will not be tolerated.`,
   },
   {
     heading: 'Stay anonymous',
-    body: 'Do not share your real name, phone number, email, social media handles, school name, or any other information that could identify you. This protects both of you and preserves what makes Penn Pal special. Automated filters are in place, but they are not perfect — please act in good faith.',
+    body: `Do not share your real name, phone number, email, social media handles, school name, or any other information that could identify you. This protects both of you and preserves what makes ${APP_NAME} special. Automated filters are in place, but they are not perfect — please act in good faith.`,
   },
   {
     heading: 'No explicit content',
-    body: 'Penn Pal is not a dating or adult platform. Sexual content, solicitation, or any content inappropriate for a general audience is prohibited.',
+    body: `${APP_NAME} is not a dating or adult platform. Sexual content, solicitation, or any content inappropriate for a general audience is prohibited.`,
   },
   {
     heading: 'No threats or violence',
@@ -31,7 +32,7 @@ const sections: PolicySection[] = [
   },
   {
     heading: 'Mental health',
-    body: 'Penn Pal is a peer connection, not a substitute for professional mental health support. If you or your partner appear to be in crisis, please share the 988 Suicide & Crisis Lifeline (call or text 988 in the US) or encourage them to seek professional help.',
+    body: `${APP_NAME} is a peer connection, not a substitute for professional mental health support. If you or your partner appear to be in crisis, please share the 988 Suicide & Crisis Lifeline (call or text 988 in the US) or encourage them to seek professional help.`,
   },
   {
     heading: 'Enforcement',
@@ -43,7 +44,7 @@ export default function GuidelinesScreen() {
   return (
     <PolicyScreen
       title="Community Guidelines"
-      lastUpdated="April 2026"
+      lastUpdated={POLICY_EFFECTIVE_DATE}
       sections={sections}
     />
   );

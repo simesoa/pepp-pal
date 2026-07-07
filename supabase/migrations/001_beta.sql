@@ -43,6 +43,7 @@ create index if not exists reports_status_idx  on public.reports(status);
 alter table public.reports enable row level security;
 
 -- Users can only insert reports for pairs they belong to
+drop policy if exists "reports_insert_own_pair" on public.reports;
 create policy "reports_insert_own_pair"
   on public.reports for insert
   with check (
@@ -72,11 +73,13 @@ create table if not exists public.blocks (
 alter table public.blocks enable row level security;
 
 -- Users can insert their own blocks
+drop policy if exists "blocks_insert_own" on public.blocks;
 create policy "blocks_insert_own"
   on public.blocks for insert
   with check (blocker_id = auth.uid());
 
 -- Users can read their own blocks
+drop policy if exists "blocks_select_own" on public.blocks;
 create policy "blocks_select_own"
   on public.blocks for select
   using (blocker_id = auth.uid());

@@ -5,19 +5,19 @@ import {
   SafeAreaView,
   Animated,
   TouchableOpacity,
-  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
 import { useMatchStatus } from '@/hooks/useMatchStatus';
 import { ErrorState } from '@/components/ErrorState';
 import { supabase } from '@/lib/supabase';
+import { showConfirm } from '@/lib/alerts';
 import { track } from '@/lib/analytics';
 
 export default function WaitingScreen() {
   const router = useRouter();
   const { userId } = useAuth();
-  const { status, pairId, error, refresh } = useMatchStatus(userId);
+  const { status, pairId, error, unregistered, refresh } = useMatchStatus(userId);
 
   const pulse1 = useRef(new Animated.Value(1)).current;
   const pulse2 = useRef(new Animated.Value(1)).current;
@@ -51,11 +51,19 @@ export default function WaitingScreen() {
     }
   }, [status, pairId, router]);
 
-  async function handleSignOut() {
-    Alert.alert('Sign out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign out', style: 'destructive', onPress: () => supabase.auth.signOut() },
-    ]);
+  // No users row → registration incomplete; recover instead of dead-ending.
+  useEffect(() => {
+    if (unregistered) {
+      router.replace('/(app)/status');
+    }
+  }, [unregistered, router]);
+
+  function handleSignOut() {
+    showConfirm('Sign out', 'Are you sure you want to sign out?', {
+      confirmLabel: 'Sign out',
+      destructive: true,
+      onConfirm: () => supabase.auth.signOut(),
+    });
   }
 
   if (error) {

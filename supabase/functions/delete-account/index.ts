@@ -52,18 +52,12 @@ serve(async (req: Request) => {
       { auth: { persistSession: false } },
     );
 
-    // Call the security-definer function which handles all cleanup
-    // We set the auth context so auth.uid() resolves correctly inside the function
-    const { error: deleteError } = await supabaseAdmin.rpc('delete_my_account');
-
-    // If the above didn't cover the auth deletion, do it explicitly
-    if (!deleteError) {
-      const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(user.id);
-      if (authDeleteError) {
-        console.error('Auth delete error:', authDeleteError.message);
-        // Non-fatal if profile was already anonymized
-      }
-    }
+    // delete_user_account takes the user id explicitly — auth.uid() is NULL
+    // in a service-role context, so the auth.uid()-based delete_my_account()
+    // would silently skip pair cleanup here. Requires migration 005.
+    const { error: deleteError } = await supabaseAdmin.rpc('delete_user_account', {
+      p_user_id: user.id,
+    });
 
     if (deleteError) {
       console.error('Delete error:', deleteError.message);
@@ -71,6 +65,13 @@ serve(async (req: Request) => {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // Belt-and-braces: ensure the auth user is gone even if the SQL delete
+    // was blocked (e.g. by a permissions change).
+    const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(user.id);
+    if (authDeleteError && !/not.?found/i.test(authDeleteError.message)) {
+      console.error('Auth delete error:', authDeleteError.message);
     }
 
     return new Response(JSON.stringify({ ok: true }), {

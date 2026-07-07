@@ -7,6 +7,7 @@ import {
   Linking,
   Pressable,
 } from 'react-native';
+import { APP_NAME } from '@/lib/config';
 
 interface SafetyModalProps {
   visible: boolean;
@@ -61,7 +62,7 @@ export function SafetyModal({ visible, onClose }: SafetyModalProps) {
             </View>
 
             {/* Crisis Text Line */}
-            <View className="bg-penn-card rounded-2xl p-4 mb-6">
+            <View className="bg-penn-card rounded-2xl p-4 mb-4">
               <Text className="text-penn-accent text-xs font-semibold uppercase tracking-wider mb-1">
                 Crisis Text Line
               </Text>
@@ -72,6 +73,13 @@ export function SafetyModal({ visible, onClose }: SafetyModalProps) {
                 Free, 24/7 support via text message
               </Text>
             </View>
+
+            {/* Disclaimer */}
+            <Text className="text-penn-muted text-[12px] leading-4 mb-6">
+              {APP_NAME} is peer support between students. It is not therapy,
+              crisis counseling, or emergency services. If you or someone you
+              know is in immediate danger, call 911.
+            </Text>
 
             <TouchableOpacity
               className="bg-penn-border rounded-xl py-3 items-center"

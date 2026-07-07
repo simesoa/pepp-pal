@@ -22,6 +22,7 @@ create index if not exists analytics_created_at_idx  on public.analytics_events(
 alter table public.analytics_events enable row level security;
 
 -- Users may only insert their own events
+drop policy if exists "analytics_insert_own" on public.analytics_events;
 create policy "analytics_insert_own"
   on public.analytics_events for insert
   with check (user_id = auth.uid() or user_id is null);

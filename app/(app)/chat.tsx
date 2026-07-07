@@ -9,7 +9,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
@@ -21,7 +20,9 @@ import { IdentityWarningBanner } from '@/components/IdentityWarningBanner';
 import { ChatMenuModal } from '@/components/ChatMenuModal';
 import { StarterPrompts } from '@/components/StarterPrompts';
 import { ErrorState } from '@/components/ErrorState';
-import { filterMessage } from '@/lib/identityFilter';
+import { supabase } from '@/lib/supabase';
+import { showAlert } from '@/lib/alerts';
+import { filterMessage, detectCrisis } from '@/lib/identityFilter';
 import { SILENCE_NUDGE_MINUTES } from '@/lib/starterPrompts';
 import { track } from '@/lib/analytics';
 import { Message } from '@/types';
@@ -34,7 +35,7 @@ export default function ChatScreen() {
   const { userId } = useAuth();
   const { messages, isLoading, fetchError, partnerTyping, sendMessage, sendTyping, retry } =
     useChat(pairId ?? null, userId);
-  const { pair } = usePairInfo(pairId ?? null);
+  const { pair, refresh: refreshPair } = usePairInfo(pairId ?? null);
 
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -93,6 +94,27 @@ export default function ChatScreen() {
     return days >= INACTIVE_DAYS;
   })();
 
+  // Ended pair: partner rematched/blocked/was banned — sending is impossible.
+  const isEnded = pair !== null && !pair.active;
+
+  const [leaving, setLeaving] = useState(false);
+  async function handleFindNewMatch() {
+    if (!pairId || leaving) return;
+    setLeaving(true);
+    const { error } = await supabase.rpc('deactivate_pair_and_rematch', {
+      p_pair_id: pairId,
+      p_both: false,
+      p_block: false,
+    });
+    setLeaving(false);
+    if (error) {
+      showAlert('Something went wrong', 'Could not start a new match. Please try again.');
+      return;
+    }
+    track('rematch_requested', { from: 'ended_pair' });
+    router.replace('/(app)/status');
+  }
+
   const showWarning = useCallback((msg: string) => {
     setWarningText(msg);
     setWarningVisible(true);
@@ -107,6 +129,7 @@ export default function ChatScreen() {
     const filterResult = filterMessage(content);
     if (filterResult.blocked) {
       showWarning(filterResult.reason ?? 'Identity sharing is not allowed until graduation.');
+      track('message_blocked');
       return;
     }
 
@@ -117,9 +140,17 @@ export default function ChatScreen() {
     const { error } = await sendMessage(content);
 
     if (error) {
-      Alert.alert('Message not sent', error, [{ text: 'OK' }]);
+      showAlert('Message not sent', error);
       setInput(content);
+      // The most common cause is the pair having been ended by the partner —
+      // refresh so the "conversation ended" state appears.
+      refreshPair();
     } else {
+      // Crisis language never blocks the message, but surfaces resources.
+      if (detectCrisis(content)) {
+        setSafetyVisible(true);
+        track('crisis_resources_shown');
+      }
       // Track first message sent per session
       if (!hasTrackedFirstMessage.current) {
         hasTrackedFirstMessage.current = true;
@@ -128,7 +159,7 @@ export default function ChatScreen() {
     }
 
     setSending(false);
-  }, [input, sending, sendMessage, showWarning]);
+  }, [input, sending, sendMessage, showWarning, refreshPair]);
 
   const handleInputChange = useCallback((text: string) => {
     setInput(text);
@@ -193,7 +224,7 @@ export default function ChatScreen() {
       </View>
 
       {/* ── Inactive pair banner ─────────────────────────────────────────── */}
-      {isInactive && (
+      {isInactive && !isEnded && (
         <View className="mx-4 mt-3 bg-penn-surface border border-penn-border rounded-2xl px-4 py-3 flex-row items-center justify-between">
           <Text className="text-penn-muted text-[13px] flex-1 leading-5">
             No messages in {INACTIVE_DAYS} days. Looking for a fresh start?
@@ -255,34 +286,60 @@ export default function ChatScreen() {
 
         <IdentityWarningBanner visible={warningVisible} message={warningText} />
 
-        {/* ── Input bar ────────────────────────────────────────────────── */}
-        <View className="flex-row items-end px-4 py-3 border-t border-penn-border gap-x-3">
-          <TextInput
-            className="flex-1 bg-penn-surface rounded-2xl px-4 py-3 text-penn-text text-[15px] border border-penn-border"
-            style={{ maxHeight: 120 }}
-            placeholder="Message your Penn Pal…"
-            placeholderTextColor="#6b6880"
-            value={input}
-            onChangeText={handleInputChange}
-            multiline
-            returnKeyType="default"
-            onSubmitEditing={handleSend}
-            blurOnSubmit={false}
-          />
-          <TouchableOpacity
-            onPress={handleSend}
-            disabled={!input.trim() || sending}
-            className={`w-11 h-11 rounded-2xl items-center justify-center ${
-              input.trim() && !sending ? 'bg-penn-accent' : 'bg-penn-border'
-            }`}
-          >
-            {sending ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text className="text-white text-base font-bold">↑</Text>
-            )}
-          </TouchableOpacity>
-        </View>
+        {/* ── Ended conversation state ─────────────────────────────────── */}
+        {isEnded ? (
+          <View className="mx-4 mb-4 bg-penn-surface border border-penn-border rounded-2xl px-4 py-4">
+            <Text className="text-penn-text text-[15px] font-semibold mb-1">
+              This conversation has ended
+            </Text>
+            <Text className="text-penn-muted text-[13px] leading-5 mb-3">
+              Your Penn Pal is no longer in this conversation. You can head back
+              to the matching pool whenever you're ready.
+            </Text>
+            <TouchableOpacity
+              className="bg-penn-accent rounded-xl py-3 items-center"
+              onPress={handleFindNewMatch}
+              disabled={leaving}
+            >
+              {leaving ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text className="text-white font-semibold text-[14px]">
+                  Find a new match
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        ) : (
+          /* ── Input bar ─────────────────────────────────────────────── */
+          <View className="flex-row items-end px-4 py-3 border-t border-penn-border gap-x-3">
+            <TextInput
+              className="flex-1 bg-penn-surface rounded-2xl px-4 py-3 text-penn-text text-[15px] border border-penn-border"
+              style={{ maxHeight: 120 }}
+              placeholder="Message your Penn Pal…"
+              placeholderTextColor="#6b6880"
+              value={input}
+              onChangeText={handleInputChange}
+              multiline
+              returnKeyType="default"
+              onSubmitEditing={handleSend}
+              blurOnSubmit={false}
+            />
+            <TouchableOpacity
+              onPress={handleSend}
+              disabled={!input.trim() || sending}
+              className={`w-11 h-11 rounded-2xl items-center justify-center ${
+                input.trim() && !sending ? 'bg-penn-accent' : 'bg-penn-border'
+              }`}
+            >
+              {sending ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text className="text-white text-base font-bold">↑</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
       </KeyboardAvoidingView>
 
       <SafetyModal visible={safetyVisible} onClose={() => setSafetyVisible(false)} />

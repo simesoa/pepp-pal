@@ -9,15 +9,25 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
+import { showAlert } from '@/lib/alerts';
+import { savePendingRegistration, registerAndMatch } from '@/lib/registration';
 import { track } from '@/lib/analytics';
+import { MIN_GRAD_YEAR, MAX_GRAD_YEAR } from '@/lib/config';
 
 const CURRENT_YEAR = new Date().getFullYear();
-const GRAD_YEARS = Array.from({ length: 8 }, (_, i) => CURRENT_YEAR + i);
+const GRAD_YEARS = Array.from({ length: 8 }, (_, i) => CURRENT_YEAR + i).filter(
+  (y) => y >= MIN_GRAD_YEAR && y <= MAX_GRAD_YEAR,
+);
+
+function confirmRedirectUrl(): string | undefined {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    return `${window.location.origin}/auth/callback`;
+  }
+  return undefined;
+}
 
 export default function SignupScreen() {
   const router = useRouter();
@@ -52,42 +62,51 @@ export default function SignupScreen() {
   }
 
   async function handleSignup() {
-    if (!validate()) return;
+    if (!validate() || !gradYear) return;
 
     setLoading(true);
+    track('signup_started', { grad_year: gradYear });
     try {
-      // 1. Create auth account
+      // Save grad year FIRST so recovery works even if the tab dies mid-flow.
+      await savePendingRegistration(gradYear, prompt.trim());
+
+      // 1. Create the auth account.
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password,
+        options: { emailRedirectTo: confirmRedirectUrl() },
       });
 
       if (authError) throw authError;
       if (!authData.user) throw new Error('Signup failed – no user returned');
 
-      // Save grad_year so status screen can complete registration after
-      // email confirmation (signUp returns no session when confirmation required)
-      await AsyncStorage.setItem('@pennpal:pending_grad_year', String(gradYear));
-      await AsyncStorage.setItem('@pennpal:pending_prompt', prompt.trim());
+      track('signup_completed', { grad_year: gradYear });
 
-      // 2. Create public profile and attempt matching via RPC.
-      // This succeeds immediately if email confirmation is disabled.
-      // If confirmation is required, auth.uid() will be null and it will
-      // fail silently – status screen retries it after the session is live.
-      const { error: rpcError } = await supabase.rpc('register_and_match', {
-        p_grad_year: gradYear,
-        p_prompt: prompt.trim() || null,
-      });
-
-      if (rpcError) {
-        console.warn('register_and_match error (will retry after confirmation):', rpcError.message);
+      // 2a. Confirm-email OFF: we have a session — register + match now,
+      //     then let the status router place the user.
+      if (authData.session) {
+        const result = await registerAndMatch(gradYear, prompt.trim() || null);
+        if (!result.ok && result.reason === 'error' && __DEV__) {
+          console.warn('[signup] registration failed, status screen will retry:', result.message);
+        }
+        router.replace('/(app)/status');
+        return;
       }
 
-      track('signup_completed', { grad_year: gradYear });
-      // Router redirect happens automatically via AuthContext listener
+      // 2b. Confirm-email ON: no session yet. The saved grad year lets the
+      //     status screen finish registration after the user confirms.
+      router.replace({
+        pathname: '/(auth)/check-email',
+        params: { email: email.trim().toLowerCase() },
+      });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Something went wrong';
-      Alert.alert('Sign up failed', message);
+      showAlert(
+        'Sign up failed',
+        /already registered/i.test(message)
+          ? 'An account with this email already exists. Try signing in instead.'
+          : message,
+      );
     } finally {
       setLoading(false);
     }

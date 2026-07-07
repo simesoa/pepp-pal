@@ -8,6 +8,7 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { APP_NAME } from '@/lib/config';
 
 const { height } = Dimensions.get('window');
 
@@ -50,7 +51,7 @@ export default function WelcomeScreen() {
               <Text className="text-white text-3xl font-bold">P</Text>
             </View>
             <Text className="text-penn-text text-4xl font-bold tracking-tight leading-tight mb-3">
-              Penn Pal
+              {APP_NAME}
             </Text>
             <Text className="text-penn-muted text-lg leading-7">
               One anonymous partner.{'\n'}
