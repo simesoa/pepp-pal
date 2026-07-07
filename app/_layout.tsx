@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { isSupabaseConfigured } from '@/lib/supabase';
+import { registerForPushNotifications, attachNotificationRouter, pushSupported } from '@/lib/notifications';
 import { APP_NAME } from '@/lib/config';
 
 SplashScreen.preventAutoHideAsync();
@@ -44,6 +45,19 @@ function RootNavigator() {
   const { session, isLoading, isBanned } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+
+  // Native push: register the device token once signed in, and route
+  // notification taps. No-op on web.
+  useEffect(() => {
+    if (!session || !pushSupported) return;
+    let detach: (() => void) | undefined;
+    registerForPushNotifications();
+    attachNotificationRouter((path, params) => {
+      if (params) router.push({ pathname: path as never, params });
+      else router.push(path as never);
+    }).then((fn) => { detach = fn; });
+    return () => detach?.();
+  }, [session, router]);
 
   useEffect(() => {
     if (isLoading) return;

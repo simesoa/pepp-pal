@@ -14,6 +14,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { showAlert, showConfirm } from '@/lib/alerts';
 import { APP_NAME, SUPPORT_EMAIL, CRISIS_LINE, CRISIS_TEXT_LINE } from '@/lib/config';
+import { NotificationPrefs } from '@/components/NotificationPrefs';
 import { track } from '@/lib/analytics';
 
 // Pull version info from app.json / app.config.js at build time
@@ -161,6 +162,9 @@ export default function SettingsScreen() {
             destructive
           />
         </View>
+
+        {/* Notifications + privacy */}
+        <NotificationPrefs />
 
         {/* Legal & Safety */}
         <SectionHeader title="Legal & Safety" />

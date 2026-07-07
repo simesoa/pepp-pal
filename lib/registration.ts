@@ -17,10 +17,11 @@
  * "No public.users row yet" is NOT a connection failure and must never be
  * shown as one.
  */
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
 import { track } from '@/lib/analytics';
-import { MIN_GRAD_YEAR, MAX_GRAD_YEAR } from '@/lib/config';
+import { MIN_GRAD_YEAR, MAX_GRAD_YEAR, REGISTRATION_MODE } from '@/lib/config';
 import { UserStatus } from '@/types';
 
 const GRAD_YEAR_KEY = '@pennpal:pending_grad_year';
@@ -66,9 +67,48 @@ export async function clearPendingRegistration(): Promise<void> {
 // ── Registration + matching ───────────────────────────────────────────────
 
 export type RegistrationResult =
-  | { ok: true; status: UserStatus; pairId: string | null; recovered: boolean }
+  | { ok: true; status: UserStatus; pairId: string | null; recovered: boolean; schoolName?: string | null }
   | { ok: false; reason: 'needs-grad-year' }
+  | { ok: false; reason: 'unsupported-school' }
   | { ok: false; reason: 'error'; message: string };
+
+/** Which transport actually registers/matches for this build. */
+export function resolveRegistrationTransport(): 'rpc' | 'edge' {
+  if (REGISTRATION_MODE === 'rpc') return 'rpc';
+  if (REGISTRATION_MODE === 'edge') return 'edge';
+  return Platform.OS === 'web' ? 'rpc' : 'edge';
+}
+
+interface RegistrationRpcResult {
+  result?: 'registered' | 'waiting' | 'matched' | 'banned' | 'unsupported_school';
+  status?: UserStatus | null;
+  pair_id?: string | null;
+  school_name?: string | null;
+}
+
+async function callRegistrationBackend(
+  gradYear: number,
+  prompt: string | null,
+): Promise<{ data: RegistrationRpcResult | null; error: { code?: string; message?: string } | null }> {
+  if (resolveRegistrationTransport() === 'edge') {
+    try {
+      const { data, error } = await supabase.functions.invoke('match-user', {
+        body: { grad_year: gradYear, prompt },
+      });
+      if (!error && data) return { data: data as RegistrationRpcResult, error: null };
+      // Edge Function unreachable/not deployed → fall back to the RPC path,
+      // which shares the same SQL contract.
+      if (__DEV__) console.warn('[registration] match-user Edge Function failed, falling back to RPC:', error?.message);
+    } catch (err) {
+      if (__DEV__) console.warn('[registration] match-user Edge Function threw, falling back to RPC:', err);
+    }
+  }
+  const { data, error } = await supabase.rpc('register_and_match', {
+    p_grad_year: gradYear,
+    p_prompt: prompt,
+  });
+  return { data: (data ?? null) as RegistrationRpcResult | null, error };
+}
 
 function isMissingFunctionError(error: { code?: string; message?: string }): boolean {
   return (
@@ -87,20 +127,23 @@ export async function registerAndMatch(
   prompt: string | null,
   { recovered = false }: { recovered?: boolean } = {},
 ): Promise<RegistrationResult> {
-  const { data, error } = await supabase.rpc('register_and_match', {
-    p_grad_year: gradYear,
-    p_prompt: prompt || null,
-  });
+  const { data, error } = await callRegistrationBackend(gradYear, prompt || null);
 
   if (!error) {
+    const result = data ?? {};
+    if (result.result === 'unsupported_school') {
+      track('unsupported_school');
+      return { ok: false, reason: 'unsupported-school' };
+    }
     await clearPendingRegistration();
     if (recovered) track('registration_recovered');
-    const result = (data ?? {}) as { status?: UserStatus; pair_id?: string | null };
+    if (result.school_name) track('school_detected');
     return {
       ok: true,
       status: result.status ?? 'waiting',
       pairId: result.pair_id ?? null,
       recovered,
+      schoolName: result.school_name ?? null,
     };
   }
 

@@ -348,3 +348,75 @@ Requires a live Supabase project + deployed build to verify manually
 (covered by suites 1–17 above): realtime chat between two browsers, email
 confirmation delivery, password-reset email delivery, Vercel deploy,
 mobile-layout sanity, Edge Function deployment.
+
+---
+
+# Feature Wave 1 — QA suites (schools, reveal, push, rate limits, read receipts, AI)
+
+## 18. Same-school matching
+
+1. Admin → System: "Allow unknown schools" ON (pilot default)
+2. Sign up `a@schoolone.edu` + `b@schooltwo.edu`, same grad year → **must NOT match**
+3. Sign up `c@schoolone.edu`, same year as A → **A + C match**
+4. Signup form shows "School detected: <name>" after entering a known-school email
+5. Admin → System: "Allow unknown schools" OFF → sign up `x@newplace.edu` → routed to the "not open at your school yet" screen; no users row created
+6. Admin → Schools: rename the auto-created school; add an allowed domain; deactivate a school
+
+## 19. Graduation reveal
+
+Follow `docs/reveal-flow.md` § Testing the reveal (locked → one-sided → mutual → blocked variants).
+Also verify: chat header shows "Reveal"; reveal screen safety copy renders; report category "Reveal pressure or identity pressure" exists.
+
+## 20. Rate limits & throttling
+
+1. Send 10 messages rapidly → 11th shows "You're sending messages too quickly. Try again in a minute."
+2. Direct PostgREST insert into messages with a user JWT → permission denied (server-side enforcement)
+3. Trigger the identity filter 5 times in an hour → cooldown message; sends blocked ~30 min; Admin → System shows the cooldown with a Clear button
+4. 6th report within an hour → readable rate-limit error
+5. 4th rematch in a day → readable rate-limit error
+
+## 21. Read receipts
+
+1. A sends a message; B has NOT opened chat → A sees "Delivered" under their latest message
+2. B opens the chat → within ~10s A sees "Seen"
+3. B turns Settings → Privacy → "Show read receipts" OFF → A sees "Delivered" again (state still recorded privately)
+4. Only the LATEST own message carries a receipt label
+
+## 22. Push notifications (physical device required)
+
+Follow `docs/push-notifications.md` § Testing. Web build must be unaffected (no-op).
+
+## 23. AI support prompts
+
+1. With AI disabled (default): chat ✎ → pick a tone → 3 static suggestions appear, tap inserts into the input (never auto-sends)
+2. Suggestions are editable before sending
+3. Type crisis language as context (or as the last partner message) → crisis resources modal instead of suggestions
+4. With AI_API_KEY set + Admin → System toggle ON → suggestions come from the model (fallback badge disappears)
+5. 31st generation in a day → "used all your AI suggestions for today"
+
+## Wave 1 verification status (2026-07-07)
+
+Verified automatically (local Postgres suite `supabase/tests/wave1-tests.sql` + `npm run test:filter` + Chromium smoke on the web export):
+
+| Check | Result |
+|---|---|
+| Migrations 001–006 apply cleanly, twice (idempotent) | ✅ pass |
+| Same school + year matches; different school/year does not | ✅ pass |
+| Cross-school matching only when explicitly enabled | ✅ pass |
+| Unsupported school → clear result, no user row | ✅ pass |
+| Match/message/reveal notifications enqueued; prefs respected (skip) | ✅ pass |
+| send_message rate limit (10/min) + abuse event recorded | ✅ pass |
+| Direct message INSERT denied for authenticated role | ✅ pass |
+| Identity-block cooldown after 5 attempts; cooldown blocks sends | ✅ pass |
+| Read receipts: mark/read, hidden when disabled, unread counts | ✅ pass |
+| Reveal: locked before date; one-sided hides identity; mutual reveals | ✅ pass |
+| Reveal blocked by admin disable / unresolved report | ✅ pass |
+| Report between users blocks future re-matching | ✅ pass |
+| Users cannot update school_id / cooldown_until; push tokens hidden | ✅ pass |
+| New admin RPCs gated by assert_admin | ✅ pass |
+| Identity filter matrix 59/59 (incl. dorm/snap/insta + no false positives) | ✅ pass |
+| tsc / eslint / expo export web / Chromium smoke (10 checks) | ✅ pass |
+
+Requires live services to verify manually: Expo push delivery on a physical
+device (needs EAS projectId), AI suggestions with a real AI_API_KEY,
+send-notification cron, two-browser realtime chat against live Supabase.

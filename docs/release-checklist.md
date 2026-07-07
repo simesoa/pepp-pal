@@ -43,6 +43,7 @@ Open **SQL Editor** and run each file sequentially:
 | 4 | `supabase/migrations/003_analytics.sql` | `analytics_events`, `log_event()`, `admin_get_pilot_stats()` |
 | 5 | `supabase/migrations/004_web_rpc.sql` | `register_and_match()` — web signup/registration path |
 | 6 | `supabase/migrations/005_pilot_fixes.sql` | **Required.** Security + matching hardening: RLS column protection, block-aware matching, `poll_and_match()`, `delete_user_account()` |
+| 7 | `supabase/migrations/006_feature_wave.sql` | **Required.** Schools, cohorts/reveal, push notification queue, `send_message` rate limiting, read receipts, admin RPCs |
 
 > ⚠️ **Never run `supabase/seed.sql` in production.** It is for local development only.
 

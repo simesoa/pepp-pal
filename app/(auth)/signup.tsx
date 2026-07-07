@@ -37,6 +37,17 @@ export default function SignupScreen() {
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [schoolInfo, setSchoolInfo] = useState<{ name: string | null; status: string } | null>(null);
+
+  async function detectSchool() {
+    const domain = email.trim().toLowerCase().split('@')[1];
+    if (!domain || !domain.endsWith('.edu')) {
+      setSchoolInfo(null);
+      return;
+    }
+    const { data, error: rpcError } = await supabase.rpc('get_school_for_domain', { p_domain: domain });
+    if (!rpcError && data) setSchoolInfo(data as { name: string | null; status: string });
+  }
 
   function validate(): boolean {
     const newErrors: Record<string, string> = {};
@@ -162,9 +173,19 @@ export default function SignupScreen() {
                 autoCapitalize="none"
                 autoCorrect={false}
                 autoComplete="email"
+                onBlur={detectSchool}
               />
               {errors.email ? (
                 <Text className="text-red-400 text-xs mt-1">{errors.email}</Text>
+              ) : null}
+              {schoolInfo?.name ? (
+                <Text className="text-penn-accent text-xs mt-1.5">
+                  School detected: {schoolInfo.name}
+                </Text>
+              ) : schoolInfo?.status === 'unsupported' ? (
+                <Text className="text-penn-muted text-xs mt-1.5">
+                  Penn Pal is not open at this school yet — you can join the waitlist after signing up.
+                </Text>
               ) : null}
             </View>
 

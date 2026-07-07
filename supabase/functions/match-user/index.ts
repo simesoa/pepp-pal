@@ -1,13 +1,21 @@
 /**
- * Supabase Edge Function: match-user
+ * Supabase Edge Function: match-user (v2 — native registration path)
  *
- * Called immediately after a user completes signup.
- * Invokes the match_user() DB function (security definer) to attempt
- * pairing with a waiting user in the same graduation year.
+ * Shares the exact registration/matching contract with the web RPC path:
+ * both call the register_user_and_match() SQL function (migration 006), so
+ * RPC and Edge Function produce identical user/match state.
  *
  * POST /functions/v1/match-user
  * Authorization: Bearer <user-jwt>
  * Body: { "grad_year": number, "prompt": string | null }
+ *
+ * Response: {
+ *   result: "registered" | "waiting" | "matched" | "banned" |
+ *           "unsupported_school" | "needs_profile",
+ *   status: "waiting" | "matched" | null,
+ *   pair_id: string | null,
+ *   school_name: string | null
+ * }
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
@@ -18,112 +26,59 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+
 serve(async (req: Request) => {
-  // Handle preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    // Create a Supabase client with the SERVICE_ROLE key (bypasses RLS for the
-    // match_user function which is security definer anyway)
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      { auth: { persistSession: false } },
-    );
-
-    // Also create a client scoped to the calling user to verify identity
+    // Verify the calling user's JWT
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+    if (!authHeader) return json({ error: 'Missing authorization header' }, 401);
 
     const supabaseUser = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
       { global: { headers: { Authorization: authHeader } } },
     );
-
-    // Verify the JWT and get the user
     const { data: { user }, error: userError } = await supabaseUser.auth.getUser();
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+    if (userError || !user) return json({ error: 'Unauthorized' }, 401);
 
     const body = await req.json().catch(() => ({}));
     const gradYear: number = body.grad_year;
-    const prompt: string | null = body.prompt ?? null;
+    const prompt: string | null = typeof body.prompt === 'string' ? body.prompt : null;
 
     if (!gradYear || gradYear < 2024 || gradYear > 2040) {
-      return new Response(JSON.stringify({ error: 'Invalid grad_year' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return json({ result: 'needs_profile', error: 'Invalid grad_year' }, 400);
     }
 
-    // Create/refresh the profile — but never touch an already-matched user's
-    // state (a repeat call must not change grad_year or reset status).
-    const { data: existing } = await supabaseAdmin
-      .from('users')
-      .select('status')
-      .eq('id', user.id)
-      .maybeSingle();
+    // Shared contract: same SQL function the web register_and_match RPC wraps
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      { auth: { persistSession: false } },
+    );
 
-    if (!existing || existing.status === 'waiting') {
-      const { error: upsertError } = await supabaseAdmin
-        .from('users')
-        .upsert({
-          id: user.id,
-          email: user.email,
-          grad_year: gradYear,
-          prompt,
-          status: 'waiting',
-        }, { onConflict: 'id', ignoreDuplicates: false });
-
-      if (upsertError) {
-        console.error('Upsert error:', upsertError);
-        return new Response(JSON.stringify({ error: upsertError.message }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-    }
-
-    // Attempt matching via DB function
-    const { error: matchError } = await supabaseAdmin
-      .rpc('match_user', { requesting_user_id: user.id });
-
-    if (matchError) {
-      console.error('Match error:', matchError);
-      return new Response(JSON.stringify({ error: matchError.message }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Return current status
-    const { data: statusData } = await supabaseAdmin
-      .from('users')
-      .select('status, pair_id')
-      .eq('id', user.id)
-      .single();
-
-    return new Response(JSON.stringify({ ok: true, ...statusData }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    const { data, error } = await supabaseAdmin.rpc('register_user_and_match', {
+      p_user_id: user.id,
+      p_grad_year: gradYear,
+      p_prompt: prompt,
     });
+
+    if (error) {
+      console.error('register_user_and_match error:', error.message);
+      return json({ error: 'Registration failed. Please try again.' }, 500);
+    }
+
+    return json(data);
   } catch (err) {
     console.error('Unexpected error:', err);
-    return new Response(JSON.stringify({ error: 'Internal server error' }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return json({ error: 'Internal server error' }, 500);
   }
 });

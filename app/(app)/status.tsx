@@ -42,6 +42,11 @@ export default function StatusScreen() {
       return;
     }
 
+    if (result.reason === 'unsupported-school') {
+      router.replace('/(app)/school-unsupported');
+      return;
+    }
+
     setErrorMessage(result.message);
   }, [userId, router]);
 

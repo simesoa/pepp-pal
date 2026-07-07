@@ -15,10 +15,12 @@ runbook.
 
 Follow [`docs/supabase-setup.md`](docs/supabase-setup.md):
 
-1. Run `supabase/schema.sql` then `supabase/migrations/001 → 005` **in order**
-   in the SQL Editor. All files are idempotent. **Migration 005 is required** —
-   it contains security and matching fixes (RLS column protection, block-aware
-   matching, `poll_and_match()`, `delete_user_account()`).
+1. Run `supabase/schema.sql` then `supabase/migrations/001 → 006` **in order**
+   in the SQL Editor. All files are idempotent. **Migrations 005 and 006 are
+   required** — 005 contains security/matching fixes; 006 adds schools,
+   reveal, push notifications, server-side rate limiting (`send_message`),
+   and read receipts. The client sends messages via the `send_message` RPC,
+   so running an old database without 006 breaks chat sends.
 2. Auth → URL Configuration: Site URL = your Vercel domain; add
    `https://<domain>/auth/callback` (and `http://localhost:8081/auth/callback`)
    to Redirect URLs.
@@ -42,6 +44,9 @@ for Production *and* Preview):
 ```
 EXPO_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=<anon key>
+# optional:
+EXPO_PUBLIC_REGISTRATION_MODE=auto        # rpc | edge | auto (default auto)
+EXPO_PUBLIC_AI_FEATURES_ENABLED=false     # UI copy flag; server decides real AI availability
 ```
 
 If they're missing the app no longer renders a blank page — it shows a
@@ -88,8 +93,14 @@ was NOT deleted.
 npm i -g supabase
 supabase login
 supabase functions deploy delete-account --project-ref <ref>
-supabase functions deploy match-user --project-ref <ref>   # future native path
+supabase functions deploy match-user --project-ref <ref>              # native registration path
+supabase functions deploy send-notification --project-ref <ref>      # push delivery worker
+supabase functions deploy generate-support-prompt --project-ref <ref> # AI prompts (static fallback without)
+supabase secrets set AI_API_KEY=<anthropic-key> --project-ref <ref>   # optional — enables real AI suggestions
 ```
+
+Push delivery also needs the pg_cron schedule from
+`docs/supabase-setup.md` §6 (web-only pilots can skip it).
 
 ## 7. Native builds (EAS)
 
@@ -100,11 +111,13 @@ Not required for the web pilot. When ready:
    project id.
 3. Check identifiers in `app.json`: `com.pennpal.app` (iOS + Android) —
    change if the final brand differs.
-4. `eas build --profile preview --platform ios` (internal) then
+4. Expo push notifications work automatically once the real `projectId`
+   exists (see `docs/push-notifications.md`) — test on a physical device.
+5. `eas build --profile preview --platform ios` (internal) then
    `--profile production` for TestFlight / Play internal testing.
-5. Fill `submit.production` in `eas.json` (Apple ID, ASC app id, team id /
+6. Fill `submit.production` in `eas.json` (Apple ID, ASC app id, team id /
    Play service-account JSON).
-6. Follow `docs/release-checklist.md`.
+7. Follow `docs/release-checklist.md`.
 
 ## 8. Common errors
 
@@ -120,7 +133,7 @@ Not required for the web pilot. When ready:
 
 ## 9. Pre-launch checklist (web pilot)
 
-- [ ] Migrations 001–005 run, verification query returns 7 functions
+- [ ] Migrations 001–006 run, verification query returns 13 functions
 - [ ] Env vars set in Vercel (prod + preview)
 - [ ] Auth Site URL + redirect URLs configured
 - [ ] Confirm email ON (public) and email templates reviewed

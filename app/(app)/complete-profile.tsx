@@ -47,6 +47,10 @@ export default function CompleteProfileScreen() {
       return;
     }
 
+    if (result.reason === 'unsupported-school') {
+      router.replace('/(app)/school-unsupported');
+      return;
+    }
     setError(
       result.reason === 'needs-grad-year'
         ? 'Please pick your graduation year.'

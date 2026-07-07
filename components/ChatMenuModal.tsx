@@ -19,6 +19,7 @@ const REPORT_REASONS = [
   'Harassment or bullying',
   'Inappropriate or sexual content',
   'Threats or violent language',
+  'Reveal pressure or identity pressure',
   'Spam',
   'Other',
 ];

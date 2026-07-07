@@ -18,6 +18,7 @@ import { MessageBubble } from '@/components/MessageBubble';
 import { SafetyModal } from '@/components/SafetyModal';
 import { IdentityWarningBanner } from '@/components/IdentityWarningBanner';
 import { ChatMenuModal } from '@/components/ChatMenuModal';
+import { AiSuggestModal } from '@/components/AiSuggestModal';
 import { StarterPrompts } from '@/components/StarterPrompts';
 import { ErrorState } from '@/components/ErrorState';
 import { supabase } from '@/lib/supabase';
@@ -33,7 +34,7 @@ export default function ChatScreen() {
   const { pairId } = useLocalSearchParams<{ pairId: string }>();
   const router = useRouter();
   const { userId } = useAuth();
-  const { messages, isLoading, fetchError, partnerTyping, sendMessage, sendTyping, retry } =
+  const { messages, isLoading, fetchError, partnerTyping, chatMeta, sendMessage, sendTyping, retry } =
     useChat(pairId ?? null, userId);
   const { pair, refresh: refreshPair } = usePairInfo(pairId ?? null);
 
@@ -41,6 +42,7 @@ export default function ChatScreen() {
   const [sending, setSending] = useState(false);
   const [safetyVisible, setSafetyVisible] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [aiVisible, setAiVisible] = useState(false);
   const [warningVisible, setWarningVisible] = useState(false);
   const [warningText, setWarningText] = useState('');
   const [showSilenceNudge, setShowSilenceNudge] = useState(false);
@@ -130,6 +132,12 @@ export default function ChatScreen() {
     if (filterResult.blocked) {
       showWarning(filterResult.reason ?? 'Identity sharing is not allowed until graduation.');
       track('message_blocked');
+      // Server-side abuse counter: 5 blocked attempts/hour → message cooldown
+      supabase.rpc('record_identity_block').then(({ data }) => {
+        if (data?.cooldown_until) {
+          showWarning("You've tried to share identifying info several times. Take a break and review the anonymity rules.");
+        }
+      }, () => {});
       return;
     }
 
@@ -183,11 +191,25 @@ export default function ChatScreen() {
     track('safety_modal_opened');
   }
 
+  const lastOwnMessageId = (() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].sender_id === userId) return messages[i].id;
+    }
+    return null;
+  })();
+
   const renderMessage = useCallback(
-    ({ item }: { item: Message }) => (
-      <MessageBubble message={item} isSelf={item.sender_id === userId} />
-    ),
-    [userId],
+    ({ item }: { item: Message }) => {
+      let receipt: 'seen' | 'delivered' | null = null;
+      if (item.id === lastOwnMessageId && !item.id.startsWith('optimistic-')) {
+        const readAt = chatMeta.partnerLastReadAt;
+        receipt = readAt && new Date(readAt) >= new Date(item.created_at) ? 'seen' : 'delivered';
+      }
+      return (
+        <MessageBubble message={item} isSelf={item.sender_id === userId} receipt={receipt} />
+      );
+    },
+    [userId, lastOwnMessageId, chatMeta.partnerLastReadAt],
   );
 
   const keyExtractor = useCallback((item: Message) => item.id, []);
@@ -201,6 +223,12 @@ export default function ChatScreen() {
           <Text className="text-penn-muted text-xs">Anonymous until graduation</Text>
         </View>
         <View className="flex-row items-center gap-x-5">
+          <TouchableOpacity
+            onPress={() => pairId && router.push({ pathname: '/(app)/reveal', params: { pairId } })}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Text className="text-penn-accent text-sm">Reveal</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             onPress={handleSupportOpen}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -313,6 +341,13 @@ export default function ChatScreen() {
         ) : (
           /* ── Input bar ─────────────────────────────────────────────── */
           <View className="flex-row items-end px-4 py-3 border-t border-penn-border gap-x-3">
+            <TouchableOpacity
+              onPress={() => setAiVisible(true)}
+              className="w-11 h-11 rounded-2xl items-center justify-center bg-penn-surface border border-penn-border"
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Text className="text-penn-accent text-base">✎</Text>
+            </TouchableOpacity>
             <TextInput
               className="flex-1 bg-penn-surface rounded-2xl px-4 py-3 text-penn-text text-[15px] border border-penn-border"
               style={{ maxHeight: 120 }}
@@ -343,6 +378,19 @@ export default function ChatScreen() {
       </KeyboardAvoidingView>
 
       <SafetyModal visible={safetyVisible} onClose={() => setSafetyVisible(false)} />
+
+      <AiSuggestModal
+        visible={aiVisible}
+        context={(() => {
+          for (let i = messages.length - 1; i >= 0; i--) {
+            if (messages[i].sender_id !== userId) return messages[i].content;
+          }
+          return null;
+        })()}
+        onClose={() => setAiVisible(false)}
+        onInsert={(text) => setInput(text)}
+        onCrisis={() => setSafetyVisible(true)}
+      />
 
       {pairId && (
         <ChatMenuModal

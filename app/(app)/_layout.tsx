@@ -13,6 +13,8 @@ export default function AppLayout() {
       <Stack.Screen name="complete-profile" />
       <Stack.Screen name="waiting" />
       <Stack.Screen name="chat" />
+      <Stack.Screen name="reveal" options={{ animation: 'slide_from_right' }} />
+      <Stack.Screen name="school-unsupported" />
       <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="banned" />
       <Stack.Screen name="policy/privacy" options={{ animation: 'slide_from_right' }} />

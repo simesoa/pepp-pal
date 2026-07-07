@@ -27,3 +27,22 @@ export const MAX_GRAD_YEAR = 2040;
 /** Crisis resources (US). */
 export const CRISIS_LINE = '988';
 export const CRISIS_TEXT_LINE = '741741';
+
+/**
+ * Registration/matching transport.
+ *   'rpc'  – register_and_match() Postgres RPC (web default)
+ *   'edge' – match-user Edge Function (requires deployment)
+ *   'auto' – Edge Function on native builds, RPC on web
+ * Both paths share the same SQL contract (register_user_and_match).
+ */
+export type RegistrationMode = 'rpc' | 'edge' | 'auto';
+export const REGISTRATION_MODE: RegistrationMode =
+  (process.env.EXPO_PUBLIC_REGISTRATION_MODE as RegistrationMode) || 'auto';
+
+/**
+ * AI-assisted support prompts. The client flag only controls UI copy; the
+ * server (app_config.ai_prompts_enabled + AI_API_KEY on the Edge Function)
+ * decides whether real AI suggestions or static templates are served.
+ */
+export const AI_FEATURES_ENABLED =
+  process.env.EXPO_PUBLIC_AI_FEATURES_ENABLED === 'true';

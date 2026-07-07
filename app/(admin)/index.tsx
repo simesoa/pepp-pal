@@ -388,6 +388,23 @@ export default function AdminDashboard() {
         </View>
       )}
 
+      {/* Feature pages */}
+      <View className="flex-row px-4 pt-3 gap-x-2">
+        {([
+          ['Schools', '/(admin)/schools'],
+          ['Cohorts', '/(admin)/cohorts'],
+          ['System', '/(admin)/system'],
+        ] as const).map(([label, path]) => (
+          <TouchableOpacity
+            key={path}
+            onPress={() => router.push(path)}
+            className="flex-1 rounded-xl py-2 items-center bg-penn-card border border-penn-border"
+          >
+            <Text className="text-xs font-semibold text-penn-muted">{label} →</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       {/* Tabs */}
       <View className="flex-row px-4 pt-3 pb-2 gap-x-2">
         {TABS.map(({ key, label }) => (

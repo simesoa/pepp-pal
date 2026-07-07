@@ -52,7 +52,23 @@ export type AnalyticsEvent =
   | 'account_deleted'
   | 'banned_screen_viewed'
   | 'starter_prompt_used'
-  | 'safety_modal_opened';
+  | 'safety_modal_opened'
+  | 'push_permission_requested'
+  | 'push_permission_granted'
+  | 'push_permission_denied'
+  | 'push_token_registered'
+  | 'school_detected'
+  | 'unsupported_school'
+  | 'reveal_viewed'
+  | 'reveal_opted_in'
+  | 'reveal_declined'
+  | 'reveal_completed'
+  | 'read_receipts_toggled'
+  | 'rate_limit_hit'
+  | 'ai_prompt_opened'
+  | 'ai_prompt_generated'
+  | 'ai_suggestion_inserted'
+  | 'ai_fallback_used';
 
 type Properties = Record<string, string | number | boolean | null>;
 

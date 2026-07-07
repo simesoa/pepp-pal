@@ -58,6 +58,8 @@ const MUST_BLOCK = [
   'meet me at the quad',
   'i live in warwick hall',
   // Names
+  'my dorm is warwick hall 3rd floor',
+  'add my snap: coolstudent22',
   'my name is John Smith',
   "i'm called Jane Doe by everyone",
   'you can call me Mary Jones',

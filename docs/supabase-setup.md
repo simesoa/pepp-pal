@@ -18,6 +18,7 @@ All SQL files are idempotent — re-running them is safe.
 | 4 | `supabase/migrations/003_analytics.sql` | `analytics_events`, `log_event()`, `admin_get_pilot_stats()` |
 | 5 | `supabase/migrations/004_web_rpc.sql` | `register_and_match()` (web signup path) |
 | 6 | `supabase/migrations/005_pilot_fixes.sql` | **Required.** Matching hardening (no duplicate pairs, no banned/blocked matches, race-safe), RLS column protection (blocks is_admin/is_banned self-escalation), block-aware rematch, `poll_and_match()` |
+| 7 | `supabase/migrations/006_feature_wave.sql` | **Feature wave 1.** Schools + same-school matching, cohorts + graduation reveal, push notification tables/queue, server-side rate limiting (`send_message`), read receipts, app_config switches, admin RPCs for all of it |
 
 Paste each file's contents into a new query and Run. All six should finish
 with "Success. No rows returned".
@@ -28,11 +29,13 @@ with "Success. No rows returned".
 select proname from pg_proc
 where proname in ('match_user','register_and_match','poll_and_match',
                   'deactivate_pair_and_rematch','log_event',
-                  'admin_get_pilot_stats','delete_my_account')
+                  'admin_get_pilot_stats','delete_my_account',
+                  'send_message','request_reveal','get_reveal_state',
+                  'register_user_and_match','mark_pair_read','enqueue_notification')
 order by proname;
 ```
 
-You should get 7 rows.
+You should get 13 rows.
 
 ## 3. Auth configuration
 
@@ -78,13 +81,47 @@ until it is deployed the app shows a graceful "not available" message.
 npm i -g supabase
 supabase login
 supabase functions deploy delete-account --project-ref <project-ref>
-supabase functions deploy match-user --project-ref <project-ref>   # native path, optional
+supabase functions deploy match-user --project-ref <project-ref>            # native registration path
+supabase functions deploy send-notification --project-ref <project-ref>    # push delivery worker
+supabase functions deploy generate-support-prompt --project-ref <project-ref>  # AI prompts (static fallback without it)
+
+# AI provider key (optional — static templates are served without it):
+supabase secrets set AI_API_KEY=<anthropic-api-key> --project-ref <project-ref>
+supabase secrets set AI_MODEL=claude-opus-4-8 --project-ref <project-ref>   # optional override
 ```
 
-No extra secrets needed — `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and
-`SUPABASE_SERVICE_ROLE_KEY` are injected automatically by the platform.
+`SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` are
+injected automatically by the platform.
 
-## 7. Quick end-to-end check
+**Push delivery cron** — notification events are enqueued by the database;
+schedule the send-notification function to drain the queue (SQL Editor,
+requires the `pg_cron` + `pg_net` extensions, Dashboard → Database →
+Extensions):
+
+```sql
+select cron.schedule('deliver-push', '* * * * *', $$
+  select net.http_post(
+    url     := 'https://<project-ref>.supabase.co/functions/v1/send-notification',
+    headers := jsonb_build_object('Authorization', 'Bearer <service-role-key>',
+                                  'Content-Type', 'application/json'),
+    body    := '{}'::jsonb
+  );
+$$);
+```
+
+Web-only pilots can skip all of this — events are queued and marked
+'skipped' when a user has no push tokens.
+
+## 7. Local SQL verification (optional)
+
+With PostgreSQL 16 installed locally you can verify the whole schema +
+migrations (idempotency + functional tests) without touching Supabase:
+
+```bash
+sudo -u postgres bash supabase/tests/run-local.sh
+```
+
+## 8. Quick end-to-end check
 
 1. Open the deployed app → sign up with `test1@school.edu`, year 2027 → you land on Waiting.
 2. Incognito window → sign up `test2@school.edu`, year 2027 → both land in Chat within ~5 seconds.
