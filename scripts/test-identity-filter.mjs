@@ -60,6 +60,7 @@ const MUST_BLOCK = [
   // Names
   'my dorm is warwick hall 3rd floor',
   'add my snap: coolstudent22',
+  'call me tonight ok?',
   'my name is John Smith',
   "i'm called Jane Doe by everyone",
   'you can call me Mary Jones',
@@ -83,6 +84,8 @@ const MUST_ALLOW = [
   'campus dining is terrible today',
   'i got into the nursing program!!',
   'been going to the gym at 6 am, proud of myself',
+  'call me crazy but i think you handled that well',
+  'call me old fashioned but i love the library',
 ];
 
 const CRISIS_POSITIVE = [

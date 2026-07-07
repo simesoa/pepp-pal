@@ -15,12 +15,14 @@ runbook.
 
 Follow [`docs/supabase-setup.md`](docs/supabase-setup.md):
 
-1. Run `supabase/schema.sql` then `supabase/migrations/001 → 006` **in order**
-   in the SQL Editor. All files are idempotent. **Migrations 005 and 006 are
+1. Run `supabase/schema.sql` then `supabase/migrations/001 → 007` **in order**
+   in the SQL Editor. All files are idempotent. **Migrations 005–007 are
    required** — 005 contains security/matching fixes; 006 adds schools,
    reveal, push notifications, server-side rate limiting (`send_message`),
-   and read receipts. The client sends messages via the `send_message` RPC,
-   so running an old database without 006 breaks chat sends.
+   and read receipts; 007 moves the identity filter into `send_message`
+   itself, so direct RPC calls cannot bypass anonymity. The client sends
+   messages via the `send_message` RPC, so running an old database without
+   006+007 breaks chat sends.
 2. Auth → URL Configuration: Site URL = your Vercel domain; add
    `https://<domain>/auth/callback` (and `http://localhost:8081/auth/callback`)
    to Redirect URLs.
@@ -133,7 +135,7 @@ Not required for the web pilot. When ready:
 
 ## 9. Pre-launch checklist (web pilot)
 
-- [ ] Migrations 001–006 run, verification query returns 13 functions
+- [ ] Migrations 001–007 run, verification query returns 14 functions
 - [ ] Env vars set in Vercel (prod + preview)
 - [ ] Auth Site URL + redirect URLs configured
 - [ ] Confirm email ON (public) and email templates reviewed

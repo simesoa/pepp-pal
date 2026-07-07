@@ -5,6 +5,11 @@
  * Returns { blocked: true, reason: string } if the message should be blocked,
  * or { blocked: false } if it is safe to send.
  *
+ * NOTE: the SERVER is the source of truth — migration 007's
+ * detect_identity_disclosure() runs these same patterns inside send_message(),
+ * so direct RPC calls cannot bypass anonymity. This client copy exists for
+ * instant UX feedback. Keep the two in sync.
+ *
  * Design principles:
  *   - Deterministic, regex/keyword based (no ML, no external calls)
  *   - Platform names and contact phrases match on WORD BOUNDARIES so normal
@@ -48,7 +53,7 @@ const SHARING_INTENT_KEYWORDS: string[] = [
   // Action phrases
   'text me', 'dm me', 'find me on', 'follow me', 'add me on', 'add me at',
   'my handle', 'my user', 'my username', 'my @ is', 'my number', 'my phone',
-  'my email', 'my ig', 'my snap', 'my discord', 'call me at', 'zoom me',
+  'my email', 'my ig', 'my snap', 'my discord', 'add my', 'call me at', 'zoom me',
   'reach me at', 'contact me at', 'hit me up', 'hmu', 'slide into', 'slide in my',
   // In-person meetup / location disclosure
   'come to my dorm', 'come to my room', 'my dorm is', 'my room number',
@@ -59,6 +64,11 @@ const SHARING_INTENT_KEYWORDS: string[] = [
 const SHARING_INTENT_PATTERNS: RegExp[] = SHARING_INTENT_KEYWORDS.map(
   (kw) => new RegExp(`\\b${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i'),
 );
+
+// Bare "call me" is contact intent, but spare common idioms ("call me crazy").
+// Mirrors detect_identity_disclosure() in migration 007 — keep in sync.
+const CALL_ME_PATTERN =
+  /\bcall me\b(?!\s+(crazy|dramatic|old[- ]?fashioned|paranoid|silly|weird|naive|cynical)\b)/i;
 
 // ── Name + identity disclosure ─────────────────────────────────────────────
 // Only fires if intent phrase AND two-capitalized-word name pattern appear together
@@ -110,6 +120,9 @@ export function filterMessage(content: string): FilterResult {
     if (pattern.test(content)) {
       return { blocked: true, reason: REASONS.contact };
     }
+  }
+  if (CALL_ME_PATTERN.test(content)) {
+    return { blocked: true, reason: REASONS.contact };
   }
 
   // Name disclosure (intent phrase + capitalized name)

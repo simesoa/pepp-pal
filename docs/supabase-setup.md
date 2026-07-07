@@ -19,6 +19,7 @@ All SQL files are idempotent — re-running them is safe.
 | 5 | `supabase/migrations/004_web_rpc.sql` | `register_and_match()` (web signup path) |
 | 6 | `supabase/migrations/005_pilot_fixes.sql` | **Required.** Matching hardening (no duplicate pairs, no banned/blocked matches, race-safe), RLS column protection (blocks is_admin/is_banned self-escalation), block-aware rematch, `poll_and_match()` |
 | 7 | `supabase/migrations/006_feature_wave.sql` | **Feature wave 1.** Schools + same-school matching, cohorts + graduation reveal, push notification tables/queue, server-side rate limiting (`send_message`), read receipts, app_config switches, admin RPCs for all of it |
+| 8 | `supabase/migrations/007_server_identity_filter.sql` | **Required.** Server-side identity filter: `detect_identity_disclosure()` enforced inside `send_message()` — direct RPC calls cannot bypass anonymity; blocked attempts log to abuse_events and feed the cooldown |
 
 Paste each file's contents into a new query and Run. All six should finish
 with "Success. No rows returned".
@@ -31,11 +32,12 @@ where proname in ('match_user','register_and_match','poll_and_match',
                   'deactivate_pair_and_rematch','log_event',
                   'admin_get_pilot_stats','delete_my_account',
                   'send_message','request_reveal','get_reveal_state',
-                  'register_user_and_match','mark_pair_read','enqueue_notification')
+                  'register_user_and_match','mark_pair_read','enqueue_notification',
+                  'detect_identity_disclosure')
 order by proname;
 ```
 
-You should get 13 rows.
+You should get 14 rows.
 
 ## 3. Auth configuration
 

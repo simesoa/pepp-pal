@@ -20,9 +20,12 @@ interface UseChatResult {
   retry: () => void;
 }
 
-/** Human-readable messages for server-side rate limit / cooldown errors. */
-function describeSendError(code: string): string {
+/** Human-readable messages for server-side limit / filter / cooldown errors. */
+function describeSendError(code: string, serverMessage?: string): string {
+  if (serverMessage) return serverMessage;
   switch (code) {
+    case 'identity_disclosure_blocked':
+      return 'Identifying info is not allowed before reveal.';
     case 'rate_limited_minute':
       return "You're sending messages too quickly. Try again in a minute.";
     case 'rate_limited_day':
@@ -152,16 +155,20 @@ export function useChat(pairId: string | null, userId: string | null): UseChatRe
         p_content: content,
       });
 
-      // Server-enforced limits come back as {error: code}, not exceptions
-      const limitCode = !error && data && typeof data === 'object' && 'error' in data
-        ? String((data as { error: string }).error)
+      // Server-enforced limits and the server-side identity filter come back
+      // as {error, message} JSON, not exceptions.
+      const blocked = !error && data && typeof data === 'object' && 'error' in data
+        ? (data as { error: string; message?: string })
         : null;
 
-      if (error || limitCode) {
+      if (error || blocked) {
         setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
-        if (limitCode) {
-          track('rate_limit_hit', { kind: limitCode });
-          return { error: describeSendError(limitCode) };
+        if (blocked) {
+          track(
+            blocked.error === 'identity_disclosure_blocked' ? 'message_blocked' : 'rate_limit_hit',
+            { kind: blocked.error },
+          );
+          return { error: describeSendError(blocked.error, blocked.message) };
         }
         return { error: describeSendError('') };
       }

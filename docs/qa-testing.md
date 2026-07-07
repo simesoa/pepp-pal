@@ -420,3 +420,48 @@ Verified automatically (local Postgres suite `supabase/tests/wave1-tests.sql` + 
 Requires live services to verify manually: Expo push delivery on a physical
 device (needs EAS projectId), AI suggestions with a real AI_API_KEY,
 send-notification cron, two-browser realtime chat against live Supabase.
+
+---
+
+## 24. Server-side identity filter (migration 007)
+
+The server is now the source of truth: `send_message()` runs
+`detect_identity_disclosure()` before inserting. The client filter remains
+as instant UX only.
+
+1. In chat, sending a phone number / email / URL / handle is blocked
+   client-side as before (banner). This is cosmetic.
+2. **Bypass test** — call the RPC directly with a user JWT:
+   ```bash
+   curl -X POST 'https://<ref>.supabase.co/rest/v1/rpc/send_message' \
+     -H "apikey: <anon-key>" -H "Authorization: Bearer <user-jwt>" \
+     -H "Content-Type: application/json" \
+     -d '{"p_pair_id":"<pair-id>","p_content":"add me on instagram @cooluser"}'
+   ```
+   → returns `{"error":"identity_disclosure_blocked","message":"Identifying info is not allowed before reveal.", ...}`
+   and NO message row is created.
+3. Repeat 5 blocked attempts within an hour (client or direct) → 30-minute
+   send cooldown; Admin → System shows the cooldown and the
+   `identity_block` events with `meta.source = server:*`.
+4. Normal words ("instantly", "snapped", "call me crazy") still send fine.
+5. After a MUTUAL reveal for the pair, contact sharing is allowed
+   (post-reveal contract).
+
+Automated coverage: `supabase/tests/identity-filter-tests.sql` (29
+assertions — every blocked category via direct RPC, allowed supportive
+messages, cooldown escalation, direct-INSERT denial, post-reveal exemption).
+
+## Hardening verification status (2026-07-07)
+
+| Check | Result |
+|---|---|
+| Migrations 001–007 apply cleanly, twice (idempotent) | ✅ pass |
+| Direct send_message RPC: phone/email/URL/handle/"my name is"/"meet me at my dorm"/"text me"/"call me"/"i'm called" all blocked with structured error | ✅ pass |
+| Blocked attempts logged to abuse_events (meta.source = server:<category>) | ✅ pass |
+| 5th blocked attempt applies 30-min cooldown; cooldown blocks further sends | ✅ pass |
+| "instantly", "snapped", "call me crazy/old fashioned" NOT blocked (server + client) | ✅ pass |
+| Normal supportive messages send normally | ✅ pass |
+| Direct table INSERT still denied for authenticated role | ✅ pass |
+| Post-reveal contact sharing allowed | ✅ pass |
+| Pilot suite (34) + wave-1 suite (39) regressions | ✅ pass |
+| Client filter suite 62/62; tsc; eslint; expo web export | ✅ pass |

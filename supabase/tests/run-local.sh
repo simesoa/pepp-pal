@@ -19,4 +19,10 @@ for f in supabase/schema.sql supabase/migrations/*.sql; do
   psql -v ON_ERROR_STOP=1 -q -d $DB -f "$f"
 done
 psql -v ON_ERROR_STOP=1 -d $DB -f supabase/tests/wave1-tests.sql | grep -cE "\| t" | xargs -I{} echo "wave1-tests: {} passing assertions"
+dropdb $DB && createdb $DB
+psql -v ON_ERROR_STOP=1 -q -d $DB -f supabase/tests/shim.sql
+for f in supabase/schema.sql supabase/migrations/*.sql; do
+  psql -v ON_ERROR_STOP=1 -q -d $DB -f "$f"
+done
+psql -v ON_ERROR_STOP=1 -d $DB -f supabase/tests/identity-filter-tests.sql | grep -cE "\| t" | xargs -I{} echo "identity-filter-tests: {} passing assertions"
 echo "ALL SQL TESTS PASS"
